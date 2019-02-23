@@ -1,12 +1,16 @@
-# TerrariumPI 3.5
+# TerrariumPI 3.9.4
 Software for cheap home automation of your reptile terrarium or any other enclosed environment. With this software you are able to control for example a terrarium so that the temperature and humidity is of a constant value. Controlling the temperature can be done with heat lights, external heating or cooling system. As long as there is one temperature sensor available the software is able to keep a constant temperature.
 
-For humidity control there is support for a spraying system. The sprayer can be configured to spray for an X amount of seconds and there is a minumal period between two spray actions. Use at least one humitidy sensors to get a constant humidity value.
+For humidity control there is support for a spraying system. The sprayer can be configured to spray for an X amount of seconds and there is a minumal period between two spray actions. Use at least one humitidy sensors to get a constant humidity value. In order to lower the humidity you can add a dehumidifier.
 
 The software is that flexible that there is no limit in amount of sensors, relay boards or door sensors. The usage can be endless. All power switches have support for timers to trigger based on a time pattern.
 
+If you are using this software for your animals or plants, **[please post some pictures](https://github.com/theyosh/TerrariumPI/issues/210)**
+
+It can either run on Python 2.7 or [Python 3.5+](https://github.com/theyosh/TerrariumPI/wiki/FAQ#how-to-use-python-35)
+
 Think off:
-- Terrarium (wet of dry)
+- Terrarium (wet or dry)
 - Aquarium
 - Tanks with animals or plants
 - Growhouse
@@ -27,35 +31,42 @@ And all this is controlled with a nice webinterface based on [Gentelella a Boots
 9. [About](#about)
 
 ## Features
-- Controlling electronic devices like lights, sprayers, heating, cooling and water pump equipment
+- Controlling electronic devices like lights, sprayers, heating, cooling, water pump equipment etc
 - Support for dimming electronic devices
   - Manual dimming through web interface
   - Predefined on and off dimming durations
   - Predefined on and off dimming percentages
   - Predefined dimming steps for environment system (heater and cooler)
-- Support for timmers in powerswitches and environment #72
+- Support for timmers in power switches and environment [#72](https://github.com/theyosh/TerrariumPI/issues/72)
   - Predefined start and stop times based on timer or weather
   - Predefined on and off durations in minutes
-- Support for Energenie USB and LAN powerswitches [EG-PM(s)2](http://energenie.com/item.aspx?id=7556)
-- Support for multiple temperature and humidity sensors
-- Support for ultrasonic sound range sensors
-- Support for native Raspberry Pi cam out of the box
-- Support for USB and remote webcams
+- Support for Energenie USB and LAN power switches [EG-PM(s)2](http://energenie.com/item.aspx?id=7556)
+- Support for WeMo Wifi power switches
+- Support for [Meross MSS425E Power Switches](https://www.meross.com/product/16/article/)
+- Support for [multiple type of sensors](https://github.com/theyosh/TerrariumPI/wiki/Hardware#sensors)
+  - Temperature
+  - Humidity
+  - Moisture
+  - Conductivity
+  - Distance
+  - pH
+  - Light intensity
+  - UV A and B
+  - Fertility
+  - Volume
+- Support for webcams and native Raspberry Pi cam out of the box
+  - Raspberry Pi cam can be streamed live with 6 seconds delay
+  - Archiving images based on motion or time interval
 - Support for analog devices through a MCP3008
   - Support for PH probe SKU SEN0161
-- Support for digital devices through a I2c
-  - Support for SHT2X
-  - Support for BME280
-  - Support for HTU21D
-  - Support for Si7021
-- Open door detection (sprayer will not spray when a door is open)
+- Support for MiFlora Bluetooth sensors
+- Open door detection. This can be used in different environment parts
 - Total power and water usage for costs calculation
 - Lights control based on sun rise and sun set or timers
 - Rain control based on humidity sensors and timers
-- Heater control based on temperature sensors or timers
+- Temperature control based on temperature sensors or timers
   - Variable day and night difference for min and max temperature
-- Cooling control based on temperature sensors or timers
-- Watertank level control based on ultrasonic sound range sensors
+- Watertank level control based on ultrasonic sound range sensors or volume sensors
 - Weather forecast from external source for lighting schema
   - Supports https://yr.no
   - Supports https://wunderground.com
@@ -63,12 +74,29 @@ And all this is controlled with a nice webinterface based on [Gentelella a Boots
 - Temperatures in Celsius or Fahrenheit
 - Distances in centimetres or inches
 - Alarm detections
-- Audio support through interal audio jack or USB soundcards #42
+- Audio support through interal audio jack or USB soundcards [#42](https://github.com/theyosh/TerrariumPI/issues/42)
   - Create playlists (loop and repeat)
   - Volume controle in the webinterface
   - Uploading audio files through webinterface
   - Audio meta data support (mediainfo)
 - Remote temperature and humidity sensors through HTTP(S) JSON API's. JSON Data format can be found on [Remote data wiki](https://github.com/theyosh/TerrariumPI/wiki/Remote-data).
+- Display support
+  - LCD 16x2 or 20x4 screens either through I2C or [Serial](https://www.instructables.com/id/Raspberry-Pi-Arduino-LCD-Screen/)
+  - OLED based on SSD1306
+- Notifications system. Custom messages for custom actions with use of variables in the messages
+  - Get notifications through
+    - Email
+    - Twitter (DM)
+    - Pushover
+    - Telegram bot
+    - Display
+    - Webhooks
+  - Notifications for
+    - Environment part low and high alarm
+    - Sensor high and low measurements
+    - Power switch toggle on and off
+    - Open and close doors
+    - System error and warning messages
 
 It is currently controling my reptile terrarium for more then three years! And my Madagascar Day Gecko is very happy with it!
 
@@ -79,17 +107,18 @@ The software has support for the following languages:
 - German
 - Italian
 - France
+- Norwegian
 
 Your language not in the list or not up to date? [Create your own language translation](https://github.com/theyosh/TerrariumPI/wiki/Translations)
 
 ## Installation
-The installation expects a Pi with working network and ssh. It is tested with [Raspbian Stretch Lite](https://www.raspberrypi.org/downloads/raspbian/). For now the Full version is not working somehow.... So use the lite image!
+The installation expects a Pi with working network and ssh. It is tested with [Raspbian Stretch Lite](https://www.raspberrypi.org/downloads/raspbian/). For now the Full version is not working somehow.... So use the lite image! A new installation will take about 45 minutes. This is due to manually compiling python modules for the latest versions. Upgrades will go much faster.
 1. Get a working Raspberry Pi and login as user 'pi'  
   `ssh pi@[raspberry_ip]`
 2. Install git  
   `sudo apt -y install git`
 3. Clone this repository and submodules!  
-  `git clone --recursive https://github.com/theyosh/TerrariumPI.git`
+  `git clone --recursive --depth 1 https://github.com/theyosh/TerrariumPI.git`
 4. Enter the new TerrariumPI folder  
   `cd TerrariumPI`
 5. Run the installer script and wait  
@@ -114,11 +143,11 @@ This updating is based on that the software is installed with the steps in the I
   `sudo ./install.sh`
 4. Restart TerrariumPI according to: https://github.com/theyosh/TerrariumPI/wiki/FAQ#how-to-restart-terrariumpi
 
-Now clear your browser cache and reload the webinterface. A brand new version should be running.
+Now **clear your browser cache** and reload the webinterface. A brand new version should be running.
 
 ## Hardware
 This software requires a Raspberry Pi and some extra hardware in order to run and work. The bare minimun and tested hardware is
-- Raspberry PI
+- Raspberry PI with at least **4GB SD card**
   - Pi 2
   - Pi 3
   - Zero
@@ -131,6 +160,8 @@ This software requires a Raspberry Pi and some extra hardware in order to run an
   - GPIO
   - 1 Wire interface
   - MCP3008 ([RasPiO Analog Zero](https://github.com/raspitv/analogzero))
+  
+[Full list of supported hardware](https://github.com/theyosh/TerrariumPI/wiki/Hardware)
   
 ### GPIO numbering
 All hardware that connects to the GPIO pins use **Physical GPIO numbering** (1 - 40). The software will translate it to BCM if needed for a supported device or sensor. [More information about GPIO pin numbering](https://pinout.xyz/)

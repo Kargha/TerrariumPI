@@ -2,6 +2,8 @@
 
 import logging
 import logging.handlers
+import logging.config
+
 import zipfile
 import codecs
 import sys
@@ -11,7 +13,11 @@ import time
 import glob
 import shutil
 
-import logging.config
+from terrariumConfig import terrariumConfig
+from terrariumNotification import terrariumNotification
+
+from gevent import monkey, sleep
+monkey.patch_all()
 
 class TimedCompressedRotatingFileHandler(logging.handlers.TimedRotatingFileHandler):
     """
@@ -62,6 +68,19 @@ class TimedCompressedRotatingFileHandler(logging.handlers.TimedRotatingFileHandl
 
         os.remove(dfn)
 
-logging.config.fileConfig('logging.cfg')
-if os.path.isfile('logging.debug.cfg'):
-  logging.config.fileConfig('logging.debug.cfg')
+class NotificationLogger(logging.StreamHandler):
+
+  def __init__(self,trafficlights,*args, **kwargs):
+    super(NotificationLogger,self).__init__(*args, **kwargs)
+
+    terrariumpi_config = terrariumConfig()
+    self.notification = terrariumNotification(trafficlights,terrariumpi_config.get_profile_image())
+
+  def emit(self,data):
+    if data.name not in ['terrariumTranslations']:
+      self.notification.message('system_' + str(data.levelname).lower() , {'message':data.getMessage()} )
+
+if os.path.isfile('logging.custom.cfg'):
+  logging.config.fileConfig('logging.custom.cfg')
+else:
+  logging.config.fileConfig('logging.cfg')

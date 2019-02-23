@@ -14,6 +14,14 @@ td {
 span.select2.select2-container {
   width: 100% !important;
 }
+.terrariumpi_select2_option {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+input.form-control:focus {
+  box-shadow: 0px 0px 5px 1px #cccccc !important;
+}
 canvas.gauge {
   max-width: 110% !important;
   max-height: 100% !important;
@@ -24,8 +32,13 @@ canvas.gauge {
 .top_nav .navbar-right {
   width: 80% !important;
 }
-.modal-lg {
-  width: 80% !important;
+@media (min-width: 600px) {
+  .modal-lg {
+    width: 80% !important;
+  }
+}
+.page-title .title_left h3 {
+  white-space: nowrap;
 }
 .page-title .title_right h3 button {
   margin: 0px 1px 1px 0px !important;
@@ -39,6 +52,32 @@ canvas.gauge {
 .history_graph.loading span.glyphicon {
   font-size: 100%;
 }
+.history_graph {
+  margin-top: 10px;
+}
+
+.select2-container--default .select2-selection--multiple,
+.select2-container--default .select2-selection--single {
+  min-height: 34px !important
+}
+
+.x_panel > .x_content > .row > .form-group > .form-group {
+  margin-bottom: 0px;
+}
+
+.select2-container {
+  height: 34px;
+}
+
+.form-group label {
+  white-space: nowrap;
+}
+
+.form-control.half {
+ width: 40%
+}
+
+
 footer {
   margin-bottom: -20px;
 }
@@ -71,6 +110,12 @@ form#profile.edit span.text {
 
 form#profile.edit label{
   padding-top: 8px;
+}
+
+form#profile .pidescription img{
+  max-width: 30%;
+  float:left;
+  margin-left: 1%;
 }
 
 .x_panel.help .x_content {
@@ -144,7 +189,16 @@ div#dashboard div.row.environment small span:first-child {
 }
 
 div#dashboard div.row.environment table.tile_info td:first-child {
-  width: 70%;
+  width: 55%;
+}
+
+div#dashboard div.row.environment table.tile_info td span.day i.fa,
+div#dashboard div.row.environment table.tile_info td span.night i.fa {
+  font-size: 0.8em;
+  float:none;
+  margin-right: 0px;
+  width: auto;
+  line-height: auto;
 }
 
 /* End Dashboard */
@@ -176,8 +230,12 @@ iframe.external_calendar {
 #tooltip span {
   cursor: default;
 }
+
+#tooltipGraph {
+  cursor: default;
+}
 .history_graph {
-  min-height: 175px;
+  min-height: 155px;
   display: block !important;
   position: relative;
 }
@@ -232,6 +290,7 @@ iframe.external_calendar {
   padding-top: 0.1em;
   line-height: 1em;
 }
+
 .power_switch span.glyphicon-time,
 .power_switch.dimmer div span.glyphicon-time {
   position: absolute;
@@ -239,6 +298,10 @@ iframe.external_calendar {
   font-size: 0.4em;
   top: 61%;
   left: 70%;
+  border-radius: 50%;
+  height: 35%;
+  width: 35%;
+  text-indent: 1px;
 }
 .power_switch.dimmer div span.glyphicon-time {
   font-size: 3.3em;
@@ -266,13 +329,17 @@ div.door_status i {
 
 /* Webcam */
 
+
+div.bar-container.seek-disabled {
+  display: none !important;
+}
+
 /* Webcam Preview */
 .webcam_preview {
   overflow: hidden;
   max-height: 250px;
   width: 100%;
 }
-
 
 .webcam_preview img {
   width: 100%;
@@ -367,7 +434,15 @@ table.dataTable .glyphicon-play {
   margin: 0.2em;
   cursor: pointer;
 }
-
+.notification_services {
+  font-size: 200%;
+}
+.notification_services i.fa {
+  cursor: pointer;
+}
+.notification_services i.fa.disabled {
+  color: #D5E2ED;
+}
 
 
 @media only screen and (max-width: 700px) {

@@ -4,7 +4,7 @@ logger = terrariumLogging.logging.getLogger(__name__)
 
 from terrariumWeather import terrariumWeather
 from terrariumSensor import terrariumSensor
-from terrariumSwitch import terrariumSwitch
+from terrariumSwitch import terrariumPowerSwitch
 from terrariumDoor import terrariumDoor
 from terrariumWebcam import terrariumWebcam
 
@@ -18,24 +18,35 @@ class terrariumTranslations(object):
   def __load(self):
     logger.debug('Loading TerariumPI translations')
     # Weather
-    self.translations['weather_field_location'] = _('Holds the external source URL. Supported sources are: %s.') % ('<strong>' + '</strong>, <strong>'.join(terrariumWeather.valid_sources.keys()) + '</strong>')
+    weather_sources = terrariumWeather.valid_sources()
+    self.translations['weather_field_location'] = _('Holds the external source URL. Supported sources are: %s.') % ('<strong>' + '</strong>, <strong>'.join(list(weather_sources.keys())) + '</strong>')
+
+    weather_sources_list = ''
+    for weather_source in weather_sources:
+      weather_sources_list += '<li><strong>{}</strong>: {}</li>'.format(weather_source,weather_sources[weather_source])
+
+    self.translations['weather_field_location_long'] = self.translations['weather_field_location'] + '<ul>' + weather_sources_list + '</ul>'
     self.translations['weather_field_wind_speed'] = _('Choose the wind speed indicator. The software will recalculate to the chosen indicator.')
     # End weather
 
     # Sensors
-    self.translations['sensor_field_hardware'] = _('Holds the sensor hardware type. Supported hardware types are: %s.') % ('<strong>' + '</strong>, <strong>'.join(terrariumSensor.VALID_HARDWARE_TYPES) + '</strong>')
+    self.translations['sensor_field_hardware'] = _('Holds the sensor hardware type. Supported hardware types are: %s.') % ('<strong>' + '</strong>, <strong>'.join(terrariumSensor.valid_hardware_types()) + '</strong>')
     self.translations['sensor_field_address'] = _('Holds the sensor address. Depending on hardware type, it is either a read only hex number, a GPIO pin, a GPIO pin combination of %s or a full HTTP(S) adress. Full url specification can be found on the %s wiki page. For GPIO use <strong>physical</strong> GPIO pin numbering.') % ('<a href="https://www.modmypi.com/blog/hc-sr04-ultrasonic-range-sensor-on-the-raspberry-pi" target="_blank">\'<i>TRIG,ECHO</i>\'</a>','<a href="https://github.com/theyosh/TerrariumPI/wiki/Remote-data#temperature-and-humidity-sensors" target="_blank">\'<i>' + _('Remote data') + '</i>\'</a>')
-    self.translations['sensor_field_type'] = _('Holds the sensor type. Supported sensor types are: %s.') % ('<strong>' + '</strong>, <strong>'.join(terrariumSensor.VALID_SENSOR_TYPES) + '</strong>')
+    self.translations['sensor_field_type'] = _('Holds the sensor type. Supported sensor types are: %s.') % ('<strong>' + '</strong>, <strong>'.join(terrariumSensor.valid_sensor_types()) + '</strong>')
     self.translations['sensor_field_name'] = _('Holds the name of the sensor.')
     self.translations['sensor_field_alarm_min'] = _('Holds the sensor lower alarm value of the sensor. When below this value, alarms can be triggered.')
     self.translations['sensor_field_alarm_max'] = _('Holds the sensor maximum alarm value of the sensor. When above this value, alarms can be triggered.')
     self.translations['sensor_field_limit_min'] = _('Holds the sensor lowest value that should be used in the graphs.')
     self.translations['sensor_field_limit_max'] = _('Holds the sensor maximum value that should be used in the graphs.')
     self.translations['sensor_field_current'] = _('Shows the sensor current value in temperature or humidity (read only).')
+    self.translations['sensor_field_min_moist'] = _('Holds the sensor lowest moisture value measured in dry air. %s') % ('<a href="https://github.com/ageir/chirp-rpi#calibration" target="_blank" title="' + _('More calibration information') + '"><i>' + _('More calibration information') + '</i></a>')
+    self.translations['sensor_field_max_moist'] = _('Holds the sensor highest moisture value measured in full water. %s') % ('<a href="https://github.com/ageir/chirp-rpi#calibration" target="_blank" title="' + _('More calibration information') + '"><i>' + _('More calibration information') + '</i></a>')
+    self.translations['sensor_field_temperature_offset'] = _('Holds the temperature offset value.')
+    self.translations['sensor_field_max_diff'] = _('Holds the maximum numbber that a sensor may change in value up or down.')
     # End sensors
 
     # Switches
-    self.translations['switch_field_hardware'] = _('Holds the switch hardware type. Supported hardware types are: %s.') % ('<strong>' + '</strong>, <strong>'.join(terrariumSwitch.VALID_HARDWARE_TYPES) + '</strong>')
+    self.translations['switch_field_hardware'] = _('Holds the switch hardware type. Supported hardware types are: %s.') % ('<strong>' + '</strong>, <strong>'.join(terrariumPowerSwitch.valid_hardware_types()) + '</strong>')
     self.translations['switch_field_address'] = _('Holds the switch address. Depending on hardware type, it is either a number or GPIO pin. For GPIO and PWM-Dimmer use <strong>physical</strong> GPIO pin numbering.')
     self.translations['switch_field_name'] = _('Holds the switch name.')
     self.translations['switch_field_power_wattage'] = _('Holds the switch power usage in Watt when switched on.')
@@ -68,6 +79,8 @@ class terrariumTranslations(object):
     self.translations['webcam_field_rotation'] = _('Holds the webcam rotation of the image.')
     self.translations['webcam_field_preview'] = _('Shows the webcam preview image.')
     self.translations['webcam_field_archive'] = _('Enabled or disable image archiving based on motion detection.')
+    self.translations['webcam_field_archive_light'] = _('Select the environment light state when enabling archiving.')
+    self.translations['webcam_field_archive_door'] = _('Select the environment door state when enabling archiving.')
     # End webcam
 
     # Audio
@@ -81,84 +94,53 @@ class terrariumTranslations(object):
     # End Audio
 
     # Environment
-    self.translations['environment_field_lights_mode'] = _('Select the mode on which the lights will be put on and off. Select \'%s\' to use the sun rise and sun set at your location. This will make the amount of lighting variable to the actual amount of daylight. When selecting \'%s\', the light will put on and off at selected times.') % (_('Weather'),_('Timer'))
-    self.translations['environment_field_lights_on'] = _('Enter the time when the light should be put on. Only available when running in \'%s\' mode.') % _('Timer')
-    self.translations['environment_field_lights_off'] = _('Enter the time when the lights should be put off. Only available when running in \'%s\' mode.') % _('Timer')
-    self.translations['environment_field_lights_on_duration'] = _('Holds the period in minutes that the lights are on withing the total timer window.')
-    self.translations['environment_field_lights_off_duration'] = _('Holds the period in minutes that the lights are off withing the total timer window')
-    self.translations['environment_field_lights_max_hours'] = _('Enter the maximum amount of lights time in hours. When the time between on and off is more then this maximum, the on and off time will be shifted more to each other.')
-    self.translations['environment_field_lights_min_hours'] = _('Enter the minimum amount of lights time in hours. When the time between on and off is less then this amount of hours, the on and off time will be widened until the minimum amount of hours entered here.')
-    self.translations['environment_field_lights_hour_shift'] = _('Enter the amount of hours that the lights should shift. Is only needed when running in the \'%s\' mode. Enter a positive number for adding hours to the start time. Use negative numbers for subtracting from the start time.') % _('Weather')
-    self.translations['environment_field_lights_power_switches'] = _('Select the power switches that should be toggled on the selected times above. Normally these are the switches connected to the lights. Select all needed switches below.')
-
-
-    self.translations['environment_field_sprayer_enable_during_night'] = _('Enable spraying when the lights are off. This can cause water flow when there is not enough heat to vaporize the water.')
-    self.translations['environment_field_sprayer_mode'] = _('Select the operating mode.')
-
-    self.translations['environment_field_sprayer_on_duration'] = _('Holds the period in minutes that the sprayer is on withing the total timer window.')
-    self.translations['environment_field_sprayer_off_duration'] = _('Holds the period in minutes that the sprayer is off withing the total timer window')
-    self.translations['environment_field_sprayer_delay'] = _('How much time must there be between two spray actions and after start up. Enter the amount of seconds in which the humidity can settle.')
-    self.translations['environment_field_sprayer_duration'] = _('How long is the system spraying. Enter the amount of seconds that the system is on when the humidity is too low.')
-    self.translations['environment_field_sprayer_power_switches'] = _('Select the power switches that should be toggled on the selected times above. Normally these are the switches connected to the sprayer. Select all needed switches below.')
-    self.translations['environment_field_sprayer_humidity_sensors'] = _('Select the humidity sensors that are used to control the humidity. When selecting multiple sensors, the average is calculated to determine the final humidity.')
-
-    self.translations['environment_field_moisture_enable_during_night'] = _('Enabled when the lights are off. This can cause water flow when there is not enough heat to vaporize the water.')
-    self.translations['environment_field_moisture_mode'] = _('Select the operating mode.')
-
-    self.translations['environment_field_moisture_on_duration'] = _('Holds the period in minutes that the moisture is on withing the total timer window.')
-    self.translations['environment_field_moisture_off_duration'] = _('Holds the period in minutes that the moisture is off withing the total timer window')
-    self.translations['environment_field_moisture_delay'] = _('How much time must there be between two actions and after start up. Enter the amount of seconds in which the environment can settle.')
-    self.translations['environment_field_moisture_duration'] = _('How long is the system running. Enter the amount of seconds that the system is on when the value is too low.')
-    self.translations['environment_field_moisture_power_switches'] = _('Select the power switches that should be toggled on the selected times above. Normally these are the switches connected to the moisture. Select all needed switches below.')
-    self.translations['environment_field_moisture_moisture_sensors'] = _('Select the sensors that are used to control the value. When selecting multiple sensors, the average is calculated to determine the final value.')
-
-    self.translations['environment_field_watertank_mode'] = _('Select the operating mode. Use \'%s\' mode to select the time period in which the water pump is running. Select \'%s\' mode to use the sun rise and sun set as on and off times. Use \'%s\' mode to have the water pump running when the water level is to low.') % (_('Timer'),_('Weather'),_('Sensor'))
-    self.translations['environment_field_watertank_on'] = _('Enter the time when the water pump should be put on. Only available when running in \'%s\' mode.') % _('Timer')
-    self.translations['environment_field_watertank_off'] = _('Enter the time when the water pump should be put off. Only available when running in \'%s\' mode.') % _('Timer')
-    self.translations['environment_field_watertank_on_duration'] = _('Holds the period in minutes that the watertank is on withing the total timer window.')
-    self.translations['environment_field_watertank_off_duration'] = _('Holds the period in minutes that the watertank is off withing the total timer window')
-    self.translations['environment_field_watertank_duration'] = _('How long is the system pumping water. Enter the amount of seconds that the system is on when the water level is too low.')
+    self.translations['environment_field_mode'] = _('Select the mode on which this environment part be put on and off. Select \'%s\' to use the sun rise and sun set at your location. This will make the amount of lighting variable to the actual amount of daylight. When selecting \'%s\', the light will put on and off at selected times.') % (_('Weather'),_('Timer'))
+    self.translations['environment_field_sensors'] = _('Select the sensors that are used to control this environment part. When selecting multiple sensors, the average is calculated to determine the final values.')
+    self.translations['environment_field_day_night_difference'] = _('Holds the value in degrees which the sensors are changing when it become night. Use positive numbers to increase the values and negative numbers to lower the values.')
+    self.translations['environment_field_day_night_source'] = _('Holds the soure that is used to determing when it is day or night.')
+    self.translations['environment_field_start'] = _('Enter the time when this environment part should be put on. Only available when running in \'%s\' mode.') % _('Timer')
+    self.translations['environment_field_stop'] = _('Enter the time when this environment part should be put off. Only available when running in \'%s\' mode.') % _('Timer')
+    self.translations['environment_field_on_duration'] = _('Holds the period in minutes that this environment part is powered on withing the total timer window.')
+    self.translations['environment_field_off_duration'] = _('Holds the period in minutes that this environment part is powered off withing the total timer window.')
+    self.translations['environment_field_delay'] = _('How much time must there be between two actions and after start up. Enter the amount of seconds in which this environment part can settle.')
+    self.translations['environment_field_power_on_duration'] = _('Holds the amount of seconds that this environment part is powered on when the value is out of range.')
+    self.translations['environment_field_lights_max_hours'] = _('Enter the maximum amount of time in hours. When the time between on and off is more then this maximum, the on and off time will be shifted more to each other.')
+    self.translations['environment_field_lights_min_hours'] = _('Enter the minimum amount of time in hours. When the time between on and off is less then this amount of hours, the on and off time will be widened until the minimum amount of hours entered here.')
+    self.translations['environment_field_lights_hour_shift'] = _('Enter the amount of hours that the power on and off times should shift. Is only needed when running in the \'%s\' mode. Enter a positive number for adding hours to the start time. Use negative numbers for subtracting from the start time.') % _('Weather')
+    self.translations['environment_field_power_switches'] = _('Select the power switches that should be used when the alarms or timers are hit. Select all needed switches below.')
     self.translations['environment_field_watertank_volume'] = _('Holds the water volume in liters.')
     self.translations['environment_field_watertank_height'] = _('Holds the water tank height in cm or inches.')
-    self.translations['environment_field_watertank_power_switches'] = _('Select the power switches that should be toggled on the selected times above. Normally these are the switches connected to the watertank. Select all needed switches below.')
-    self.translations['environment_field_watertank_distance_sensors'] = _('Select the distance sensors that are used to control the level. When selecting multiple sensors, the average is calculated to determine the final distance.')
-
-
-    self.translations['environment_field_heater_enable_during_day'] = _('Enable heating when the lights are on. This can cause overheating when the lights are on.')
-    self.translations['environment_field_heater_mode'] = _('Select the operating mode. Use \'%s\' mode to select the time period in which the heating is running. Select \'%s\' mode to use the sun rise and sun set as on and off times. When the sun rises the heating system will stop. Use \'%s\' mode to have the heating running when the lights are off.') % (_('Timer'),_('Weather'),_('Sensor'))
-    self.translations['environment_field_heater_on'] = _('Enter the time when the heater should be put on. Only available when running in \'%s\' mode.') % _('Timer')
-    self.translations['environment_field_heater_off'] = _('Enter the time when the heater should be put off. Only available when running in \'%s\' mode.') % _('Timer')
-    self.translations['environment_field_heater_on_duration'] = _('Holds the period in minutes that the heater is on withing the total timer window.')
-    self.translations['environment_field_heater_off_duration'] = _('Holds the period in minutes that the heater is off withing the total timer window')
-    self.translations['environment_field_heater_settle_timeout'] = _('Holds the period in seconds in which the heating will wait to settle the new temperature before changing again.')
-    self.translations['environment_field_heater_night_difference'] = _('Holds the dirrence in degrees that the night temperature should change. Use positive and negative values.')
-    self.translations['environment_field_heater_night_source'] = _('Holds the soure that is used to determing when it is day or night.')
-    self.translations['environment_field_heater_power_switches'] = _('Select the power switches that should be toggled on the selected times above. Normally these are the switches connected to the heater. Select all needed switches below.')
-    self.translations['environment_field_heater_temperature_sensors'] = _('Select the temperature sensors that are used to control the temperature. When selecting multiple sensors, the average is calculated to determine the final temperature.')
-
-
-    self.translations['environment_field_cooler_enable_during_night'] = _('Enable cooling when the lights are off. This can cause a very low temperature when the lights are off.')
-    self.translations['environment_field_cooler_mode'] = _('Select the operating mode. Use \'%s\' mode to select the time period in which the heating is running. Select \'%s\' mode to use the sun rise and sun set as on and off times. When the sun rises the heating system will stop. Use \'%s\' mode to have the heating running when the lights are off.') % (_('Timer'),_('Weather'),_('Sensor'))
-    self.translations['environment_field_cooler_on'] = _('Enter the time when the cooler should be put on. Only available when running in \'%s\' mode.') % _('Timer')
-    self.translations['environment_field_cooler_off'] = _('Enter the time when the cooler should be put off. Only available when running in \'%s\' mode.') % _('Timer')
-    self.translations['environment_field_cooler_on_duration'] = _('Holds the period in minutes that the cooler is on withing the total timer window.')
-    self.translations['environment_field_cooler_off_duration'] = _('Holds the period in minutes that the cooler is off withing the total timer window')
-    self.translations['environment_field_cooler_power_switches'] = _('Select the power switches that should be toggled on the selected times above. Normally these are the switches connected to the cooler. Select all needed switches below.')
-    self.translations['environment_field_cooler_temperature_sensors'] = _('Select the temperature sensors that are used to control the temperature. When selecting multiple sensors, the average is calculated to determine the final temperature.')
-
-
-    self.translations['environment_field_ph_enable_during_day'] = _('Enabled when the lights are on.')
-    self.translations['environment_field_ph_mode'] = _('Select the operating mode. Use \'%s\' mode to select the time period in which the ph is running. Select \'%s\' mode to use the sun rise and sun set as on and off times. When the sun rises the ph system will stop. Use \'%s\' mode to have the ph running when the lights are off.') % (_('Timer'),_('Weather'),_('Sensor'))
-    self.translations['environment_field_ph_on'] = _('Enter the time when the ph should be put on. Only available when running in \'%s\' mode.') % _('Timer')
-    self.translations['environment_field_ph_off'] = _('Enter the time when the ph should be put off. Only available when running in \'%s\' mode.') % _('Timer')
-    self.translations['environment_field_ph_on_duration'] = _('Holds the period in minutes that the ph is on withing the total timer window.')
-    self.translations['environment_field_ph_off_duration'] = _('Holds the period in minutes that the ph is off withing the total timer window')
-    self.translations['environment_field_ph_settle_timeout'] = _('Holds the period in seconds in which the ph will wait to settle the new value before changing again.')
-    self.translations['environment_field_ph_night_difference'] = _('Holds the difference that the night value should change. Use positive and negative values.')
-    self.translations['environment_field_ph_night_source'] = _('Holds the soure that is used to determing when it is day or night.')
-    self.translations['environment_field_ph_power_switches'] = _('Select the power switches that should be toggled on the selected times above. Normally these are the switches connected to the ph. Select all needed switches below.')
-    self.translations['environment_field_ph_ph_sensors'] = _('Select the sensors that are used to control the value. When selecting multiple sensors, the average is calculated to determine the final value.')
+    self.translations['environment_field_watertank_offset'] = _('Holds the distance between top of the liquid when full and the sensor in cm or inches.')
+    self.translations['environment_field_light_state'] = _('Select when the power switches can toggle. When lights are on, off or just always')
+    self.translations['environment_field_door_state'] = _('Select when the power switches can toggle. When the door is open, cosed or just always')
     # End environment
+
+    # Notifications
+    self.translations['notification_email_receiver'] = _('Holds the email address on which you would like to receive messages.')
+    self.translations['notification_email_server'] = _('Holds the mail server hostname or IP.')
+    self.translations['notification_email_serverport'] = _('Holds the mail server portnumber. SSL and TLS will be autodetected.')
+    self.translations['notification_email_email_username'] = _('Holds the username for authentication with the mailserver if needed.')
+    self.translations['notification_email_email_password'] = _('Holds the password for authentication with the mailserver if needed.')
+
+    self.translations['notification_display_hardwaretype'] = _('Holds the display chip that is used.')
+    self.translations['notification_display_address'] = _('Holds the I2C address of the LCD screen. Use the value found with i2cdetect. Add ,[NR] to change the I2C bus.')
+    self.translations['notification_display_title'] = _('Reserve first LCD line for static title.')
+
+    self.translations['notification_twitter_consumer_key'] = _('Holds your Twitter consumer key. More information %shere%s') % ('<a href=\'https://apps.twitter.com/\' target=\'_blank\'>','</a>')
+    self.translations['notification_twitter_consumer_secret'] = _('Holds your Twitter consumer secret. More information %shere%s') % ('<a href=\'https://apps.twitter.com/\' target=\'_blank\'>','</a>')
+    self.translations['notification_twitter_access_token'] = _('Holds your Twitter access token. More information %shere%s') % ('<a href=\'https://apps.twitter.com/\' target=\'_blank\'>','</a>')
+    self.translations['notification_twitter_access_token_secret'] = _('Holds your Twitter access token secret. More information %shere%s') % ('<a href=\'https://apps.twitter.com/\' target=\'_blank\'>','</a>')
+
+    self.translations['notification_pushover_api_token'] = _('Holds the PushOver API token. More information %shere%s') % ('<a href=\'https://pushover.net/api\' target=\'_blank\'>','</a>')
+    self.translations['notification_pushover_user_key'] =  _('Holds the PushOver API user key. More information %shere%s') % ('<a href=\'https://pushover.net/api\' target=\'_blank\'>','</a>')
+
+    self.translations['notification_telegram_bot_token'] =  _('Holds the Telegram Bot token. More information %shere%s') % ('<a href=\'https://core.telegram.org/bots#6-botfather\' target=\'_blank\'>','</a>')
+    self.translations['notification_telegram_username'] =  _('Holds the Telegram username that is allowed for receiving messages. Can be multiple usernames seperated by a comma. More information %shere%s') % ('<a href=\'https://core.telegram.org/bots#6-botfather\' target=\'_blank\'>','</a>')
+    self.translations['notification_telegram_proxy'] =  _('Holds the proxy address in form of [schema]://[user]:[password]@[server.com]:[port]. Can either be socks5 or http(s) for schema.')
+
+    self.translations['notification_webhook_address'] =  _('Holds the url to post notification data to. You can use %name% variables in the post url')
+
+    # End notifications
 
     # System
     self.translations['system_field_language'] = _('Choose your interface language.')
@@ -175,9 +157,11 @@ class terrariumTranslations(object):
     self.translations['system_field_power_price'] = _('Holds the amount of euro/dollar per 1 kW/h (1 Kilowatt per hour).')
     self.translations['system_field_water_price'] = _('Holds the amount of euro/dollar per 1000 liters water.')
     self.translations['system_field_temperature_indicator'] = _('Choose the temperature indicator. The software will recalculate to the chosen indicator.')
+    self.translations['system_field_windspeed_indicator'] = _('Choose the windspeed indicator. The software will recalculate to the chosen indicator.')
+    self.translations['system_field_volume_indicator'] = _('Choose the volume (liquid) indicator. The software will recalculate to the chosen indicator.')
     self.translations['system_field_hostname'] = _('Holds the host name or IP address on which the software will listen for connections. Enter :: for all addresses to bind.')
     self.translations['system_field_port_number'] = _('Holds the port number on which the software is listening for connections.')
-    self.translations['system_field_owfs_port'] = _('Holds the port number on which the OWFS software is running. Leave empty to disable OWFS support.')
+    #self.translations['system_field_owfs_port'] = _('Holds the port number on which the OWFS software is running. Leave empty to disable OWFS support.')
     # End system
 
 
@@ -190,7 +174,7 @@ class terrariumTranslations(object):
     self.translations['profile_description'] = _('Holds a small description about the animal.')
     self.translations['profile_more_information'] = _('Holds a link to more information.')
 
-    logger.info('Loaded TerrariumPI %s translations' % (len(self.translations),))
+    logger.info('Loaded TerrariumPI with %s translations' % (len(self.translations),))
 
   def get_translation(self,translation):
     if translation in self.translations:

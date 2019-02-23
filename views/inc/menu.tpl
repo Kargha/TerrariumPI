@@ -38,6 +38,9 @@
                   <a><i class="fa fa-tint"></i> {{_('Sensors')}} <span class="fa fa-chevron-down"></span></a>
                   <ul class="nav child_menu">
                     <li>
+                      <a href="sensor_gauge_overview.html">{{_('All')}}</a>
+                    </li>
+                    <li>
                       <a href="sensor_temperature.html">{{_('Temperature')}}</a>
                     </li>
                     <li>
@@ -57,6 +60,15 @@
                     </li>
                     <li>
                       <a href="sensor_light.html">{{_('Light')}}</a>
+                    </li>
+                    <li>
+                      <a href="sensor_fertility.html">{{_('Fertility')}}</a>
+                    </li>
+                    <li>
+                      <a href="sensor_co2.html">{{_('CO2')}}</a>
+                    </li>
+                    <li>
+                      <a href="sensor_volume.html">{{_('Volume')}}</a>
                     </li>
                     <li>
                       <a href="sensor_settings.html">{{_('Settings')}}</a>
@@ -119,13 +131,16 @@
                       <a href="system_status.html">{{_('Status')}}</a>
                     </li>
                     <li>
-                      <a href="system_log.html">{{_('Log')}}</a>
+                      <a href="notifications.html">{{_('Notifications')}}</a>
                     </li>
                     <li>
                       <a href="system_environment.html">{{_('Environment')}}</a>
                     </li>
                     <li>
                       <a href="system_settings.html">{{_('Settings')}}</a>
+                    </li>
+                    <li>
+                      <a href="system_log.html">{{_('Log')}}</a>
                     </li>
                   </ul>
                 </li>

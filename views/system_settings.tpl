@@ -16,33 +16,26 @@
             <p>{{_('Here you can configure your TerrariumPI server.')}} {{!_('Required fields are marked with \'%s\'.') % ('<span class="required">*</span>',)}}</p>
             <ul>
               <li>
-                <strong>{{_('Weather location')}}</strong>: {{!translations.get_translation('weather_field_location')}}
-                <ul>
-                  <li><strong>YR.no</strong>: https://www.yr.no/place/[COUNTRY]/[PROVANCE]/[CITY]</li>
-                  <li><strong>Weather underground</strong>: http://api.wunderground.com/api/[YOUR_API_KEY]/<strong>geolookup/astronomy/hourly10day</strong>/q/[COUNTRY]/[CITY].json</li>
-                  <li><strong>OpenWeatherMap</strong>: https://api.openweathermap.org/data/2.5/weather?q=[CITY],[COUNTRY_2LETTER]&units=metric&appid=[YOUR_API_KEY]</li>
-                </ul>
-              </li>
-              <li>
-                <strong>{{_('Wind speed indicator')}}</strong>: {{translations.get_translation('weather_field_wind_speed')}}
+                <strong>{{_('Weather location')}}</strong>: {{!translations.get_translation('weather_field_location_long')}}
               </li>
             </ul>
           </div>
         </div>
         <div class="row">
-          <div class="col-md-12 col-sm-12 col-xs-12">
-            <div class="x_panel">
-              <div class="x_title">
-                <h2 id="deviceid">{{_('TerrariumPI')}} <small>{{device}}</small></h2>
-                <ul class="nav navbar-right panel_toolbox">
-                  <li>
-                    <a class="collapse-link"><i class="fa fa-chevron-up"></i></a>
-                  </li>
-                </ul>
-                <div class="clearfix"></div>
-              </div>
-              <div class="x_content">
-                <form action="/api/config/system" class="form-horizontal form-label-left" data-parsley-validate="" method="put">
+          <form action="/api/config/system" class="form-horizontal form-label-left" data-parsley-validate="" method="put">
+
+            <div class="col-md-12 col-sm-12 col-xs-12">
+              <div class="x_panel">
+                <div class="x_title">
+                  <h2 id="deviceid">{{_('TerrariumPI')}} <small>{{device}}</small></h2>
+                  <ul class="nav navbar-right panel_toolbox">
+                    <li>
+                      <a class="collapse-link"><i class="fa fa-chevron-up"></i></a>
+                    </li>
+                  </ul>
+                  <div class="clearfix"></div>
+                </div>
+                <div class="x_content">
                   <div class="form-group">
                     <label class="control-label col-md-3 col-sm-3 col-xs-12" for="language">{{_('Language')}}</label>
                     <div class="col-md-7 col-sm-6 col-xs-10">
@@ -59,10 +52,10 @@
                     </div>
                   </div>
                   <div class="form-group">
-                    <label class="control-label col-md-3 col-sm-3 col-xs-12" for="windspeed">{{_('Wind speed indicator')}}</label>
+                    <label class="control-label col-md-3 col-sm-3 col-xs-12" for="windspeed_indicator">{{_('Wind speed indicator')}}</label>
                     <div class="col-md-7 col-sm-6 col-xs-10">
                       <div class="form-group" data-toggle="tooltip" data-placement="right" title="" data-original-title="{{translations.get_translation('weather_field_wind_speed')}}">
-                        <select class="form-control" name="windspeed" required="required" tabindex="-1" placeholder="{{_('Select an option')}}">
+                        <select class="form-control" name="windspeed_indicator" required="required" tabindex="-1" placeholder="{{_('Select an option')}}">
                           <option value="ms">{{_('m/s')}}</option>
                           <option value="kmh">{{_('Km/h')}}</option>
                         </select>
@@ -76,6 +69,7 @@
                         <select class="form-control" required="required" name="temperature_indicator" tabindex="-1" placeholder="{{_('Select an option')}}">
                           <option value="C">{{_('Celsius')}}</option>
                           <option value="F">{{_('Fahrenheit')}}</option>
+                          <option value="K">{{_('Kelvin')}}</option>
                         </select>
                       </div>
                     </div>
@@ -87,6 +81,18 @@
                         <select class="form-control" required="required" name="distance_indicator" tabindex="-1" placeholder="{{_('Select an option')}}">
                           <option value="cm">{{_('Centimetre')}}</option>
                           <option value="inch">{{_('Inches')}}</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label class="control-label col-md-3 col-sm-3 col-xs-12" for="volume_indicator">{{_('Volume indicator')}}</label>
+                    <div class="col-md-7 col-sm-6 col-xs-10">
+                      <div class="form-group" data-toggle="tooltip" data-placement="right" title="" data-original-title="{{translations.get_translation('system_field_volume_indicator')}}">
+                        <select class="form-control" required="required" name="volume_indicator" tabindex="-1" placeholder="{{_('Select an option')}}">
+                          <option value="L">{{_('Litres')}}</option>
+                          <option value="usgall">{{_('US Gallons')}}</option>
+                          <option value="ukgall">{{_('UK Gallons')}}</option>
                         </select>
                       </div>
                     </div>
@@ -110,11 +116,13 @@
                     </div>
                   </div>
                   <div class="form-group">
-                    <label class="control-label col-md-3 col-sm-3 col-xs-12">{{_('Always authenticate')}}</label>
-                    <div class="col-md-7 col-sm-6 col-xs-10" data-toggle="tooltip" data-placement="right" title="" data-original-title="{{translations.get_translation('system_field_always_authentication')}}">
-                      <div class="btn-group" data-toggle="buttons">
-                        <label class="btn btn-primary" data-toggle-class="btn-primary" data-toggle-passive-class="btn-default"><input name="always_authenticate" type="radio" value="true">{{_('Yes')}}</label>
-                        <label class="btn btn-default" data-toggle-class="btn-primary" data-toggle-passive-class="btn-default"><input name="always_authenticate" type="radio" value="false">{{_('No')}}</label>
+                    <label class="control-label col-md-3 col-sm-3 col-xs-12" for="always_authenticate">{{_('Authentication')}}</label>
+                    <div class="col-md-7 col-sm-6 col-xs-10">
+                      <div class="form-group" data-toggle="tooltip" data-placement="right" title="" data-original-title="{{translations.get_translation('system_field_always_authentication')}}">
+                        <select class="form-control" name="always_authenticate" required="required" tabindex="-1" placeholder="{{_('Select an option')}}">
+                          <option value="true">{{_('Full authentication')}}</option>
+                          <option value="false">{{_('Changes only')}}</option>
+                        </select>
                       </div>
                     </div>
                   </div>
@@ -134,11 +142,13 @@
                     </div>
                   </div>
                   <div class="form-group">
-                    <label class="control-label col-md-3 col-sm-3 col-xs-12">{{_('Horizontal graph legend')}}</label>
-                    <div class="col-md-7 col-sm-6 col-xs-10" data-toggle="tooltip" data-placement="right" title="" data-original-title="{{translations.get_translation('system_field_horizontal_graph_legend')}}">
-                      <div class="btn-group" data-toggle="buttons">
-                        <label class="btn btn-primary" data-toggle-class="btn-primary" data-toggle-passive-class="btn-default"><input name="horizontal_graph_legend" type="radio" value="true">{{_('Yes')}}</label>
-                        <label class="btn btn-default" data-toggle-class="btn-primary" data-toggle-passive-class="btn-default"><input name="horizontal_graph_legend" type="radio" value="false">{{_('No')}}</label>
+                    <label class="control-label col-md-3 col-sm-3 col-xs-12" for="horizontal_graph_legend">{{_('Graph legend layout')}}</label>
+                    <div class="col-md-7 col-sm-6 col-xs-10">
+                      <div class="form-group" data-toggle="tooltip" data-placement="right" title="" data-original-title="{{translations.get_translation('system_field_horizontal_graph_legend')}}">
+                        <select class="form-control" name="horizontal_graph_legend" required="required" tabindex="-1" placeholder="{{_('Select an option')}}">
+                          <option value="true">{{_('Horizontal')}}</option>
+                          <option value="false">{{_('Vertical')}}</option>
+                        </select>
                       </div>
                     </div>
                   </div>
@@ -172,22 +182,45 @@
                       <input class="form-control" name="port" required="required" type="text" placeholder="{{_('Port number')}}" data-toggle="tooltip" data-placement="right" title="" data-original-title="{{translations.get_translation('system_field_port_number')}}">
                     </div>
                   </div>
-                  <div class="form-group">
-                    <label class="control-label col-md-3 col-sm-3 col-xs-12" for="owfs_port">{{_('OWFS server port')}}</label>
-                    <div class="col-md-7 col-sm-6 col-xs-10">
-                      <input class="form-control" name="owfs_port" type="text" placeholder="{{_('OWFS server port')}}" data-toggle="tooltip" data-placement="right" title="" data-original-title="{{translations.get_translation('system_field_owfs_port')}}">
-                    </div>
-                  </div>
-                  <div class="ln_solid"></div>
-                  <div class="form-group">
-                    <div class="col-md-11 col-sm-11 col-xs-12 text-center">
-                      <button class="btn btn-success" type="submit">{{_('Submit')}}</button>
-                    </div>
-                  </div>
-                </form>
+                </div>
               </div>
             </div>
-          </div>
+            <div class="col-md-12 col-sm-12 col-xs-12">
+              <div class="x_panel">
+                <div class="x_title">
+                  <h2><span aria-hidden="true" class="glyphicon glyphicon-cloud-download"></span> {{_('Merros Cloud')}}</h2>
+                  <ul class="nav navbar-right panel_toolbox">
+                    <li>
+                      <a class="collapse-link"><i class="fa fa-chevron-up"></i></a>
+                    </li>
+                  </ul>
+                  <div class="clearfix"></div>
+                </div>
+                <div class="x_content">
+
+                  <div class="form-group">
+                      <label class="control-label col-md-3 col-sm-3 col-xs-12" for="merros_username">{{_('Merros Cloud username')}}</label>
+                      <div class="col-md-7 col-sm-6 col-xs-10">
+                        <input class="form-control" name="merros_username" type="text" placeholder="{{_('Merros Cloud username')}}" data-toggle="tooltip" data-placement="right" title="" data-original-title="{{translations.get_translation('system_field_merros_username')}}">
+                      </div>
+                    </div>
+
+                    <div class="form-group">
+                      <label class="control-label col-md-3 col-sm-3 col-xs-12" for="merros_password">{{_('Merros Cloud password')}}</label>
+                      <div class="col-md-7 col-sm-6 col-xs-10">
+                        <input class="form-control" name="merros_password" type="password" placeholder="{{_('Merros Cloud password')}}" data-toggle="tooltip" data-placement="right" title="" data-original-title="{{translations.get_translation('system_field_merros_password')}}">
+                      </div>
+                    </div>
+                </div>
+              </div>
+            </div>
+            <div class="ln_solid"></div>
+            <div class="form-group">
+              <div class="col-md-11 col-sm-11 col-xs-12 text-center">
+                <button class="btn btn-success" type="submit">{{_('Submit')}}</button>
+              </div>
+            </div>
+          </form>
         </div>
         <script type="text/javascript">
           $(document).ready(function() {
@@ -199,25 +232,25 @@
                 minimumResultsForSearch: Infinity
             });
 
-            var windspeed_indicator = $("select[name='windspeed']").select2({
+            var windspeed_indicator = $("select[name='windspeed_indicator']").select2({
                 placeholder: '{{_('Select an option')}}',
                 allowClear: false,
                 minimumResultsForSearch: Infinity
             });
 
-            var temperature_indicator = $("select[name='temperature_indicator']").select2({
-                placeholder: '{{_('Select an option')}}',
-                allowClear: false,
-                minimumResultsForSearch: Infinity
-            });
-
-            var distance_indicator = $("select[name='distance_indicator']").select2({
+            var volume_indicator = $("select[name='volume_indicator']").select2({
                 placeholder: '{{_('Select an option')}}',
                 allowClear: false,
                 minimumResultsForSearch: Infinity
             });
 
             var soundcard_selector = $("select[name='soundcard']").select2({
+                placeholder: '{{_('Select an option')}}',
+                allowClear: false,
+                minimumResultsForSearch: Infinity
+            });
+
+            $("select[name='temperature_indicator'],select[name='distance_indicator'],select[name='always_authenticate'],select[name='horizontal_graph_legend']").select2({
                 placeholder: '{{_('Select an option')}}',
                 allowClear: false,
                 minimumResultsForSearch: Infinity
@@ -230,7 +263,8 @@
 
               $.get('/api/config/weather',function(data) {
                 $('input[name="location"]').val(data.location);
-                windspeed_indicator.val(data.windspeed).trigger('change');
+                windspeed_indicator.val(data.windspeed_indicator).trigger('change');
+                volume_indicator.val(data.volume_indicator).trigger('change');
 
                 $.get($('form').attr('action'),function(data){
                   $.each(data.available_languages,function(index,value){
@@ -241,11 +275,8 @@
                     if (config_field.length >= 1) {
                       switch (config_field.prop('type').toLowerCase()) {
                         case 'text':
+                        case 'password':
                           config_field.val(data[value]);
-                          break;
-
-                        case 'radio':
-                          $('input[name="' + value + '"][value="' + data[value] + '"]').attr('checked','checked').parent().addClass('active');
                           break;
 
                         case 'select-one':

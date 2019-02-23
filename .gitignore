@@ -1,9 +1,11 @@
 *.pyc
 settings.cfg
 history.db*
-static/webcam/*.jpg
+webcam
 log/*.log*
 audio/*
 description.txt
 weather.txt
-logging.debug.cfg
+logging.custom.cfg
+notifications.cfg
+__pycache__

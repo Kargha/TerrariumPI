@@ -2,173 +2,195 @@
 import terrariumLogging
 logger = terrariumLogging.logging.getLogger(__name__)
 
-import time
+from time import time
 import RPi.GPIO as GPIO
 import Adafruit_DHT
 
+from terrariumSensor import terrariumSensorSource
 from terrariumUtils import terrariumUtils
 
-class terrariumGPIOSensor(object):
+from gevent import monkey, sleep
+monkey.patch_all()
 
-  hardwaretype = None
+class terrariumGPIOSensor(terrariumSensorSource):
+  TYPE = None
+  VALID_SENSOR_TYPES = []
 
-  def __init__(self,datapin,powerpin = None):
-    self.__datapin = datapin
-    self.__powerpin = powerpin
-    self.__value = None
+  def __init__(self, sensor_id, sensor_type, address, name = '', callback_indicator = None):
+    super(terrariumGPIOSensor,self).__init__(sensor_id, sensor_type, address, name, callback_indicator)
+    gpio_pins = self.get_address().split(',')
+    logger.debug('Initializing sensor type \'%s\' with GPIO address %s'.format(self.get_type(),gpio_pins))
+    GPIO.setup(terrariumUtils.to_BCM_port_number(gpio_pins[0]), GPIO.IN,pull_up_down=GPIO.PUD_UP)
 
-    logger.debug('Initializing sensor type \'%s\' with GPIO address %s' % (self.__class__.__name__,self.__datapin))
-    #GPIO.setup(terrariumUtils.to_BCM_port_number(self.__datapin), GPIO.IN,pull_up_down=GPIO.PUD_UP)
-    GPIO.setup(terrariumUtils.to_BCM_port_number(self.__datapin), GPIO.IN)
+  def load_data(self):
+    data = None
+    if self.open():
+      data = self.load_raw_data()
+      self.close()
 
-    if self.__powerpin is not None:
-      # Some kind of 'power management' :) https://raspberrypi.stackexchange.com/questions/68123/preventing-corrosion-on-yl-69
-      logger.debug('Enabling power control management on sensor type \'%s\' with GPIO power address %s' % (self.__class__.__name__,self.__powerpin))
-      GPIO.setup(terrariumUtils.to_BCM_port_number(self.__powerpin), GPIO.OUT)
+    return data
 
-    #GPIO.add_event_detect(terrariumUtils.to_BCM_port_number(self.__gpionummer), GPIO.BOTH, bouncetime=300)
-    #GPIO.add_event_callback(terrariumUtils.to_BCM_port_number(self.__gpionummer), self.__state_change)
+  def load_raw_data(self):
+    try:
+      gpio_pins = self.get_address().split(',')
+      data = GPIO.input(terrariumUtils.to_BCM_port_number(gpio_pins[0]))
+      logger.debug('Read state sensor type \'{}\' with GPIO address {} with current alarm: {}'.format(self.get_type(),gpio_pins[0],data))
 
-  def __enter__(self):
-    """used to enable python's with statement support"""
-    return self
+    except Exception as ex:
+      logger.warning('Error reading new data from {} sensor \'{}\'. Error message: {}'.format(self.get_type(),self.get_name(),ex))
+      return False
 
-  def __exit__(self, type, value, traceback):
-    """with support"""
-    self.close()
+    return data
 
-  def __get_raw_data(self):
-    if self.__powerpin is not None:
-      logger.debug('Powering up sensor type \'%s\' with GPIO address %s' % (self.__class__.__name__,self.__powerpin))
-      GPIO.output(terrariumUtils.to_BCM_port_number(self.__powerpin),1)
-      # Time to get power flowing. Not sure what the right amount time would be....
-      time.sleep(0.5)
+  def open(self):
+    try:
+      gpio_pins = self.get_address().split(',')
+      logger.debug('Open sensor type \'{}\' with address {}'.format(self.get_type(),gpio_pins))
 
-    self.__value = GPIO.input(terrariumUtils.to_BCM_port_number(self.__datapin))
-    logger.debug('Read state sensor type \'%s\' with GPIO address %s with current alarm: %s' % (self.__class__.__name__,self.__datapin,self.__value))
+      if len(gpio_pins) > 1 and terrariumUtils.to_BCM_port_number(gpio_pins[-1]):
+        # Some kind of 'power management' with the last gpio pin number :) https://raspberrypi.stackexchange.com/questions/68123/preventing-corrosion-on-yl-69
+        logger.debug('Enabling power control management on sensor type \'{}\' with GPIO power pin {}'.format(self.get_type(),gpio_pins[-1]))
+        GPIO.setup(terrariumUtils.to_BCM_port_number(gpio_pins[-1]), GPIO.OUT)
+        sleep(0.5)
 
-    if self.__powerpin is not None:
-      logger.debug('Powering down sensor type \'%s\' with GPIO address %s' % (self.__class__.__name__,self.__powerpin))
-      GPIO.output(terrariumUtils.to_BCM_port_number(self.__powerpin),0)
+      GPIO.setup(terrariumUtils.to_BCM_port_number(gpio_pins[0]), GPIO.IN)
 
-  def get_current(self):
-    self.__get_raw_data()
-    return None if not terrariumUtils.is_float(self.__value) else float(self.__value)
+    except Exception as ex:
+      logger.warning('Error opening {} sensor \'{}\'. Error message: {}'.format(self.get_type(),self.get_name(),ex))
+      return False
+
+    return True
 
   def close(self):
-    logger.debug('Close sensor type \'%s\' with address %s' % (self.__class__.__name__,self.__datapin))
-    GPIO.cleanup(terrariumUtils.to_BCM_port_number(self.__datapin))
-    if self.__powerpin is not None:
-      logger.debug('Close power control pin of sensor type \'%s\' with address %s' % (self.__class__.__name__,self.__powerpin))
-      GPIO.cleanup(terrariumUtils.to_BCM_port_number(self.__powerpin))
+    try:
+      gpio_pins = self.get_address().split(',')
+      logger.debug('Closing sensor type \'{}\' with address {}'.format(self.get_type(),gpio_pins))
+      GPIO.cleanup(terrariumUtils.to_BCM_port_number(gpio_pins[0]))
+
+      if len(gpio_pins) > 1 and terrariumUtils.to_BCM_port_number(gpio_pins[-1]):
+        logger.debug('Closeing power control pin of sensor type \'{}\' at GPIO power pin {}'.format(self.get_type(),gpio_pins[-1]))
+        GPIO.cleanup(terrariumUtils.to_BCM_port_number(gpio_pins[-1]))
+
+    except Exception as ex:
+      logger.warning('Error closing {} sensor \'{}\'. Error message: {}'.format(self.get_type(),self.get_name(),ex))
 
 class terrariumYTXXSensorDigital(terrariumGPIOSensor):
+  TYPE = 'ytxx-digital'
+  VALID_SENSOR_TYPES = ['moisture']
 
-  hardwaretype = 'ytxx-digital'
-
-  def get_moisture(self):
-    # Convert the value
-    # Return 0 for dry (value get_current = 1)
-    # Return 100 for wet (value get_current = 0)
-    return 0.0 if self.get_current() == 1.0 else 100.0
-
-  def get_alarm(self):
-    return self.get_moisture() == 0.0
-
-  def get_state(self):
-    return (_('Dry') if self.get_alarm() else _('Wet'))
+  def load_raw_data(self):
+    data = super(terrariumYTXXSensorDigital,self).load_raw_data()
+    return { self.get_sensor_type() : 0.0 if data == 1.0 else 100.0}
 
 class terrariumDHTSensor(terrariumGPIOSensor):
+  TYPE = None
+  VALID_SENSOR_TYPES = ['temperature','humidity']
 
-  hardwaretype = None
+  def load_raw_data(self):
+    data = None
+    try:
+      gpio_pins = self.get_address().split(',')
+      data = {}
 
-  def __init__(self,datapin,dhttype,powerpin = None):
-    super(terrariumDHTSensor,self).__init__(datapin,powerpin)
-    self.__datapin = datapin
-    #self.__powerpin = powerpin
-    #GPIO.cleanup(terrariumUtils.to_BCM_port_number(self.__datapin))
-    self.__temperature = None
-    self.__humidity = None
+      sensor_device = Adafruit_DHT.DHT11
+      if terrariumDHT22Sensor.TYPE == self.get_type():
+        sensor_device = Adafruit_DHT.DHT22
+      elif terrariumAM2302Sensor.TYPE == self.get_type():
+        sensor_device = Adafruit_DHT.AM2302
 
-    if 'dht11' == dhttype:
-      self.__dhttype = Adafruit_DHT.DHT11
-    elif 'dht22' == dhttype:
-      self.__dhttype = Adafruit_DHT.DHT22
-    elif 'am2302' == dhttype:
-      self.__dhttype = Adafruit_DHT.AM2302
+      data['humidity'], data['temperature'] = Adafruit_DHT.read_retry(sensor_device, terrariumUtils.to_BCM_port_number(gpio_pins[0]),4)
 
-  def __get_raw_data(self):
-    # Need some extra timeout to get the chip to relax....:(
-    time.sleep(2.1)
-    self.__humidity, self.__temperature = Adafruit_DHT.read_retry(self.__dhttype, terrariumUtils.to_BCM_port_number(self.__datapin),5)
+    except Exception as ex:
+      logger.warning('Error getting new data from {} sensor \'{}\'. Error message: {}'.format(self.get_type(),self.get_name(),ex))
 
-  def get_temperature(self):
-    self.__get_raw_data()
-    return None if not terrariumUtils.is_float(self.__temperature) else float(self.__temperature)
-
-  def get_humidity(self):
-    self.__get_raw_data()
-    return None if not terrariumUtils.is_float(self.__humidity) else float(self.__humidity)
+    return data
 
 class terrariumDHT11Sensor(terrariumDHTSensor):
+  TYPE = 'dht11'
 
   hardwaretype = 'dht11'
 
-  def __init__(self,datapin,powerpin = None):
-    super(terrariumDHT11Sensor,self).__init__(datapin,terrariumDHT11Sensor.hardwaretype,powerpin)
-
 class terrariumDHT22Sensor(terrariumDHTSensor):
+  TYPE = 'dht22'
 
   hardwaretype = 'dht22'
 
-  def __init__(self,datapin,powerpin = None):
-    super(terrariumDHT22Sensor,self).__init__(datapin,terrariumDHT22Sensor.hardwaretype,powerpin)
-
 class terrariumAM2302Sensor(terrariumDHTSensor):
+  TYPE = 'am2302'
 
   hardwaretype = 'am2302'
 
-  def __init__(self,datapin,powerpin = None):
-    super(terrariumAM2302Sensor,self).__init__(datapin,terrariumAM2302Sensor.hardwaretype,powerpin)
-
 class terrariumHCSR04Sensor(terrariumGPIOSensor):
+  TYPE = 'hc-sr04'
+  VALID_SENSOR_TYPES = ['distance']
 
-  hardwaretype = 'hc-sr04'
+  def __init__(self, sensor_id, sensor_type, address, name = '', callback_indicator = None):
+    self.set_limit_max(1000)
+    super(terrariumHCSR04Sensor,self).__init__(sensor_id, sensor_type, address, name, callback_indicator)
 
-  def __init__(self,triggerpin,echopin,powerpin = None):
-    super(terrariumHCSR04Sensor,self).__init__(echopin,powerpin)
-    GPIO.setup(terrariumUtils.to_BCM_port_number(triggerpin),GPIO.OUT)
-    #ECHO pin is done at super()
-    self.__datapin = echopin
-    self.__triggerpin = triggerpin
-    self.__value = None
+  def open(self):
+    try:
+      gpio_pins = self.get_address().split(',')
+      logger.debug('Open sensor type \'{}\' with address {}'.format(self.get_type(),gpio_pins))
 
-  def __get_raw_data(self):
-    GPIO.output(terrariumUtils.to_BCM_port_number(self.__triggerpin), False)
-    time.sleep(2)
-    GPIO.output(terrariumUtils.to_BCM_port_number(self.__triggerpin), True)
-    time.sleep(0.00001)
-    GPIO.output(terrariumUtils.to_BCM_port_number(self.__triggerpin), False)
-    pulse_start = time.time()
-    while GPIO.input(terrariumUtils.to_BCM_port_number(self.__datapin))==0:
-      pulse_start = time.time()
-    pulse_end = time.time()
-    while GPIO.input(terrariumUtils.to_BCM_port_number(self.__datapin))==1:
-      pulse_end = time.time()
+      if len(gpio_pins) > 2 and terrariumUtils.to_BCM_port_number(gpio_pins[-1]):
+        # Some kind of 'power management' with the last gpio pin number :) https://raspberrypi.stackexchange.com/questions/68123/preventing-corrosion-on-yl-69
+        logger.debug('Enabling power control management on sensor type \'{}\' with GPIO power pin {}'.format(self.get_type(),gpio_pins[-1]))
+        GPIO.setup(terrariumUtils.to_BCM_port_number(gpio_pins[-1]), GPIO.OUT)
+        sleep(0.5)
 
-    pulse_duration = pulse_end - pulse_start
-    # https://www.modmypi.com/blog/hc-sr04-ultrasonic-range-sensor-on-the-raspberry-pi
-    # Measure in centimetre
-    self.__value = round(pulse_duration * 17150,5)
+      GPIO.setup(terrariumUtils.to_BCM_port_number(gpio_pins[0]), GPIO.OUT) # Trigger out
+      GPIO.setup(terrariumUtils.to_BCM_port_number(gpio_pins[1]), GPIO.IN)  # Data in
 
-  def get_current(self):
-    self.__get_raw_data()
-    return None if not terrariumUtils.is_float(self.__value) else float(self.__value)
+    except Exception as ex:
+      logger.warning('Error opening {} sensor \'{}\'. Error message: {}'.format(self.get_type(),self.get_name(),ex))
+      return False
+
+    return True
+
+  def load_raw_data(self):
+    data = None
+    try:
+      gpio_pins = self.get_address().split(',')
+      data = {}
+
+      GPIO.output(terrariumUtils.to_BCM_port_number(gpio_pins[0]), False)
+      sleep(2)
+      GPIO.output(terrariumUtils.to_BCM_port_number(gpio_pins[0]), True)
+      sleep(0.00001)
+      GPIO.output(terrariumUtils.to_BCM_port_number(gpio_pins[0]), False)
+      pulse_start = time()
+      starttime = pulse_start
+      while GPIO.input(terrariumUtils.to_BCM_port_number(gpio_pins[1])) == 0:
+        pulse_start = time()
+        # Somehow, sometimes this will end in an endless loop. The value will never go to '0' (zero). So wrong measurement and return none...
+        if pulse_start - starttime > 2:
+          logger.warn('Sensor {} \'{}\' is failing to get in the right state. Abort!'.format(self.get_type(),self.get_name()))
+          return data
+
+      pulse_end = time()
+      while GPIO.input(terrariumUtils.to_BCM_port_number(gpio_pins[1])) == 1:
+        pulse_end = time()
+
+      pulse_duration = pulse_end - pulse_start
+      # https://www.modmypi.com/blog/hc-sr04-ultrasonic-range-sensor-on-the-raspberry-pi
+      # Measure in centimetre
+      data = { self.get_sensor_type() : round(pulse_duration * 17150,5)}
+
+    except Exception as ex:
+      pass
+
+    return data
 
   def close(self):
     super(terrariumHCSR04Sensor,self).close()
-    logger.debug('Close sensor type \'%s\' with address %s' % (self.__class__.__name__,self.__triggerpin))
-    GPIO.cleanup(terrariumUtils.to_BCM_port_number(self.__triggerpin))
 
-  def get_distance(self):
-    return self.get_current()
+    try:
+      gpio_pins = self.get_address().split(',')
+
+      if len(gpio_pins) > 2 and terrariumUtils.to_BCM_port_number(gpio_pins[1]):
+        logger.debug('Closeing trigger control pin of sensor type \'{}\' at GPIO power pin {}'.format(self.get_type(),gpio_pins[1]))
+        GPIO.cleanup(terrariumUtils.to_BCM_port_number(gpio_pins[1]))
+
+    except Exception as ex:
+      logger.warning('Error closing {} sensor \'{}\'. Error message: {}'.format(self.get_type(),self.get_name(),ex))

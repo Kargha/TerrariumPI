@@ -8,7 +8,7 @@ var globals = {
   gauges: [],
   webcams: [],
   graphs: {},
-  graph_cache: 5 * 60,
+  graph_cache: 1 * 60,
   websocket_timer: null,
   online_timer: null,
   current_version: null,
@@ -20,11 +20,12 @@ var globals = {
 var source_row = null;
 // Translations for dataTable module
 var dataTableTranslations = {
-  'en' : '//cdn.datatables.net/plug-ins/1.10.16/i18n/English.json',
-  'nl' : '//cdn.datatables.net/plug-ins/1.10.16/i18n/Dutch.json',
-  'de' : '//cdn.datatables.net/plug-ins/1.10.16/i18n/German.json',
-  'it' : '//cdn.datatables.net/plug-ins/1.10.16/i18n/Italian.json',
-  'fr' : '//cdn.datatables.net/plug-ins/1.10.16/i18n/France.json'
+  'en' : '//cdn.datatables.net/plug-ins/1.10.19/i18n/English.json',
+  'nl' : '//cdn.datatables.net/plug-ins/1.10.19/i18n/Dutch.json',
+  'de' : '//cdn.datatables.net/plug-ins/1.10.19/i18n/German.json',
+  'it' : '//cdn.datatables.net/plug-ins/1.10.19/i18n/Italian.json',
+  'fr' : '//cdn.datatables.net/plug-ins/1.10.19/i18n/France.json',
+  'no' : '//cdn.datatables.net/plug-ins/1.10.19/i18n/Norwegian-Bokmal.json'
 };
 
 /**
@@ -379,6 +380,14 @@ function formatUptime(uptime) {
 function capitalizeFirstLetter(string) {
     return string[0].toUpperCase() + string.slice(1);
 }
+
+// https://stackoverflow.com/questions/8837454/sort-array-of-objects-by-single-key-with-date-value
+function sortByKey(array, key) {
+  return array.sort(function(a, b) {
+    var x = a[key]; var y = b[key];
+    return ((x < y) ? -1 : ((x > y) ? 1 : 0));
+  });
+}
 /* General functions - End numbers, currency, etc formatting  */
 
 /* General functions - Websockets  */
@@ -408,8 +417,12 @@ function websocket_init(reconnect) {
         break;
 
       case 'environment':
-        $.each(['heater','sprayer','light','cooler','watertank','moisture','ph','light'], function(index, value) {
-          update_dashboard_environment(value, data.data[value]);
+        var dashboard = $('div.row.environment div.pull-right div.x_content');
+        $.each(data.data, function(key, value) {
+          update_dashboard_environment(key, value);
+          if ('disabled' == value.config.mode) {
+            dashboard.find('div.row.environment_' + key).detach().appendTo(dashboard);
+          }
         });
         break;
       case 'sensor_gauge':
@@ -567,7 +580,7 @@ function update_online_indicator(online) {
 
 /* General functions - Form functions */
 function init_form_settings(pType) {
-  if (['environment','system'].indexOf(pType) == -1) {
+  if (['environment','system','notifications'].indexOf(pType) == -1) {
     $('.page-title').append('<div class="title_right"><h3><button type="button" class="btn btn-primary alignright" data-toggle="modal" data-target=".add-form"><span class="glyphicon glyphicon-plus" aria-hidden="true"></span></button></h3> </div>');
   }
 
@@ -621,13 +634,6 @@ function init_form_settings(pType) {
       break;
 
     case 'environment':
-      $('form').on('submit',function() {
-        $(this).find('input[type="radio"]').removeAttr('checked').removeAttr('disabled');
-        $(this).find('label.active > input[type="radio"]').attr('checked','checked');
-        $(this).find('label:not(.active) > input[type="radio"]').attr('disabled','disabled');
-      });
-      break;
-
     case 'system':
       $('form').on('submit',function() {
         $(this).find('input[type="radio"]').removeAttr('checked').removeAttr('disabled');
@@ -636,7 +642,6 @@ function init_form_settings(pType) {
       });
       break;
   }
-
 }
 
 function check_form_data(form) {
@@ -679,15 +684,15 @@ function process_form() {
 function prepare_form_data(form) {
   var formdata = [];
   var form_type = form.attr('action').split('/').pop();
-  var re = /(sensor|switch|webcam|light|sprayer|watertank|moisture|heater|cooler|ph|door|profile|playlist)(_\d+)?_(.*)/i;
+  var re = /(sensor|switch|webcam|light|humidity|temperature|watertank|moisture|conductivity|ph|co2|fertility|door|profile|playlist)(_\d+)?_(.*)/i;
   var matches = null;
   var objectdata = {};
   var prev_nr = -1;
-  if (form_type === 'weather' || form_type === 'environment' || form_type === 'system' || form_type === 'profile') {
+  if (form_type === 'weather' || form_type === 'environment' || form_type === 'system' || form_type === 'profile' || form_type === 'notifications') {
     formdata = {};
   }
   try {
-    form.find('div:visible input:not([disabled="disabled"]),div:visible select:not([disabled="disabled"])').each(function() {
+    form.find('div:visible input:not([disabled="disabled"]),div:visible select:not([disabled="disabled"]),div:visible textarea:not([disabled="disabled"])').each(function() {
       var field_name = $(this).attr('name');
       if (field_name !== undefined) {
         var field_value = $(this).val();
@@ -695,6 +700,7 @@ function prepare_form_data(form) {
           case 'profile':
           case 'weather':
           case 'system':
+          case 'notifications':
             if (field_name == 'age') {
               field_value = moment(field_value,'L').unix();
             }
@@ -702,6 +708,7 @@ function prepare_form_data(form) {
             break;
           case 'sensors':
           case 'switches':
+          case 'powerswitches':
           case 'environment':
           case 'webcams':
           case 'doors':
@@ -730,7 +737,7 @@ function prepare_form_data(form) {
                   prev_nr = current_nr;
                 }
 
-                if (['timer_start','timer_stop','start','stop','on','off'].indexOf(matches[3]) != -1) {
+                if (matches[3].match(/timer_(start|stop)$/)) {
                   // Load from local format, and store in 24h format. Do not use UNIX timestamp formats
                   field_value = moment(field_value, 'LT').format('HH:mm');
                 }
@@ -742,7 +749,7 @@ function prepare_form_data(form) {
       }
     });
     if (Object.keys(objectdata).length > 1) {
-      if (form_type === 'weather' || form_type === 'environment' || form_type === 'system') {
+      if (form_type === 'weather' || form_type === 'environment' || form_type === 'system' || form_type === 'notifications') {
         formdata[prev_nr] = $.extend(true, {}, objectdata);
       } else {
         formdata.push($.extend(true, {}, objectdata));
@@ -756,6 +763,21 @@ function prepare_form_data(form) {
   return formdata;
 }
 /* General functions - End form functions */
+
+function flatten (obj) {
+  var newObj = {};
+  for (var key in obj) {
+    if (obj[key] !== null && obj[key].constructor === Object) {
+      var temp = flatten(obj[key])
+      for (var key2 in temp) {
+        newObj[key+"_"+key2] = temp[key2];
+      }
+    } else {
+      newObj[key] = obj[key];
+    }
+  }
+  return newObj;
+}
 
 /* General functions - System functions */
 function online_updater() {
@@ -924,9 +946,6 @@ function sensor_gauge(name, data) {
       $('#' + name + ' .gauge').attr('done',1);
       //$('#' + name + ' .goal-wrapper span:nth-child(2)').text('°' + globals.temperature_indicator);
       globals.gauges[name] = new Gauge($('#' + name + ' .gauge')[0]).setOptions(opts);
-      if (name != 'system_disk' && name != 'system_memory') {
-        globals.gauges[name].setTextField($('#' + name + ' .gauge-value')[0]);
-      }
       // Only set min and max only once. Else the gauge will flicker each data update
       globals.gauges[name].maxValue = data.limit_max;
       globals.gauges[name].setMinValue(data.limit_min);
@@ -935,13 +954,21 @@ function sensor_gauge(name, data) {
     if (name == 'system_load') {
       data.current /= data.cores;
     }
+    // Chirp light sensor is based on backscattering and is not able to produce LUX values
+    if ('light' == data.type && 'chirp' == data.hardwaretype) {
+      data.indicator = '%';
+    }
+
     $('#' + name + ' .gauge-indicator').text(data.indicator);
     globals.gauges[name].set(data.current);
     if (name == 'system_disk' || name == 'system_memory') {
       $('#' + name + ' .gauge-value').text(formatBytes(data.current))
+    } else {
+      $('#' + name + ' .gauge-value').text(formatNumber(data.current,0,3))
     }
     $('div#' + name + ' .x_title h2 .badge.bg-red').toggle(data.alarm);
     $('div#' + name + ' .x_title h2 .badge.bg-orange').toggle(data.error);
+    $('div#' + name + ' .x_title h2 .badge.bg-blue').toggle(data.exclude_avg);
   }
 }
 
@@ -996,7 +1023,7 @@ function load_history_graph(id,type,data_url,nocache) {
       clearTimeout(globals.graphs[id].timer);
       globals.graphs[id].timer = setTimeout(function() {
           load_history_graph(id,type,data_url);
-      }, 1 * 60 * 1000);
+      }, globals.graph_cache * 1000);
 
     } else {
       // Load fresh data...
@@ -1008,11 +1035,42 @@ function load_history_graph(id,type,data_url,nocache) {
           });
         });
 
-        history_graph(id, globals.graphs[id].data, type);
+        if ('light' == type && data_url.indexOf('/average/') > 0) {
+          globals.graphs[id].data.light_average = true;
+          globals.graphs[id].data.light_uvi = false;
+
+          $.getJSON(data_url.replace('/light','/uvi'), function(online_data) {
+            if (online_data['uvi'] != undefined && online_data['uvi']['average']['current'].length > 0) {
+              // Have UV Index, use that
+              globals.graphs[id].data.light_uvi = true;
+              $.each(online_data['uvi'], function(name, data) {
+                globals.graphs[id].timestamp = now;
+                globals.graphs[id].data['alarm_max'] = data.current;
+              });
+              history_graph(id, globals.graphs[id].data, type);
+            } else {
+              $.getJSON(data_url.replace('/light','/uva'), function(online_data) {
+                $.each(online_data['uva'], function(name, data) {
+                  globals.graphs[id].timestamp = now;
+                  globals.graphs[id].data['alarm_min'] = data.current;
+                });
+                $.getJSON(data_url.replace('/light','/uvb'), function(online_data) {
+                  $.each(online_data['uvb'], function(name, data) {
+                    globals.graphs[id].timestamp = now;
+                    globals.graphs[id].data['alarm_max'] = data.current;
+                  });
+                  history_graph(id, globals.graphs[id].data, type);
+                });
+              });
+            }
+          });
+        } else {
+          history_graph(id, globals.graphs[id].data, type);
+        }
         clearTimeout(globals.graphs[id].timer);
         globals.graphs[id].timer = setTimeout(function() {
           load_history_graph(id,type,data_url);
-        }, 1 * 60 * 1000);
+        }, globals.graph_cache * 1000);
       });
     }
 
@@ -1072,7 +1130,7 @@ function history_graph(name, data, type) {
     yaxis: {
       ticks: graph_ticks,
       tickColor: "rgba(51, 51, 51, 0.06)",
-      tickDecimals: 1,
+      tickDecimals: 2,
       tickFormatter: function(val, axis) {
         switch(type) {
           case 'system_memory':
@@ -1095,7 +1153,6 @@ function history_graph(name, data, type) {
             break;
 
           case 'humidity':
-          case 'sprayer':
           case 'average_humidity':
           case 'moisture':
             val = formatNumber(val) + ' %';
@@ -1121,7 +1178,32 @@ function history_graph(name, data, type) {
             break;
 
           case 'light':
-            val = formatNumber(val) + '';
+            val = formatNumber(val) + ' lux';
+            break;
+
+          case 'light_percentage':
+            val = formatNumber(val) + ' %';
+            break;
+
+          case 'fertility':
+            val = formatNumber(val) + ' µS/cm';
+            break;
+
+          case 'co2':
+            val = formatNumber(val) + ' ppm';
+            break
+
+          case 'volume':
+            val = formatNumber(val) + ' ' + globals.volume_indicator;
+            break
+
+          case 'uva':
+          case 'uvb':
+            val = formatNumber(val) + ' µW/cm^2';
+            break;
+
+          case 'uvi':
+            val = formatNumber(val);
             break;
 
           case 'door':
@@ -1134,14 +1216,70 @@ function history_graph(name, data, type) {
   };
 
   switch (type) {
-    case 'sprayer':
+    case 'light':
+      if (data.light_average !== undefined && data.light_average) {
+
+        graph_data = [{
+          label: '{{_('Light')}}',
+          data: data.current
+        }];
+
+        graph_options.colors = ['rgba(38, 185, 154, 0.38)'];
+
+        if (data.light_uvi !== undefined && data.light_uvi) {
+          graph_data.push({ label: '{{_('UV')}}',
+                             data: data.alarm_max,
+                             yaxis: 2});
+
+          graph_options.colors.push('rgba(3, 88, 206, 0.38)');
+        } else {
+          graph_data.push({ label: '{{_('UVA')}}',
+                             data: data.alarm_min,
+                             yaxis: 2});
+          graph_data.push({ label: '{{_('UVB')}}',
+                             data: data.alarm_max,
+                             yaxis: 2});
+
+          graph_options.colors.push('rgba(3, 88, 106, 0.38)')
+          graph_options.colors.push('rgba(3, 88, 206, 0.38)')
+        }
+
+        graph_options.xaxes = [jQuery.extend(true, {}, graph_options.xaxes)];
+
+        var yaxis2 = jQuery.extend(true, {}, graph_options.yaxes);
+        yaxis2.alignTicksWithAxis = 1;
+        yaxis2.position = 'right';
+
+        yaxis2.tickFormatter = function(val, axis) { return val.toFixed(axis.tickDecimals) + (!(data.light_uvi !== undefined && data.light_uvi) ? ' µW/cm^2' : '');}
+
+        graph_options.yaxes = [jQuery.extend(true, {}, graph_options.yaxes),yaxis2];
+
+      } else {
+        graph_data = [{
+          label: '{{_('Current')}}',
+          data: data.current
+        }, {
+          label: '{{_('Alarm min')}}',
+          data: data.alarm_min
+        }, {
+          label: '{{_('Alarm max')}}',
+          data: data.alarm_max
+        }];
+      }
+      break;
     case 'humidity':
     case 'temperature':
     case 'distance':
     case 'ph':
     case 'moisture':
     case 'conductivity':
-    case 'light':
+    case 'light_percentage':
+    case 'uva':
+    case 'uvb':
+    case 'uvi':
+    case 'fertility':
+    case 'co2':
+    case 'volume':
       graph_data = [{
         label: '{{_('Current')}}',
         data: data.current
@@ -1230,7 +1368,17 @@ function history_graph(name, data, type) {
       }, {
         label: '{{_('Water flow in L/m')}}',
         data: data.water_flow,
+        yaxis: 2
       }];
+
+      graph_options.xaxes = [jQuery.extend(true, {}, graph_options.xaxes)];
+
+      var yaxis2 = jQuery.extend(true, {}, graph_options.yaxes);
+      yaxis2.alignTicksWithAxis = 1;
+      yaxis2.position = 'right';
+      yaxis2.tickFormatter = function(val, axis) { return val.toFixed(axis.tickDecimals) + " L/m";}
+
+      graph_options.yaxes = [jQuery.extend(true, {}, graph_options.yaxes),yaxis2];
       break;
 
     case 'door':
@@ -1248,8 +1396,17 @@ function history_graph(name, data, type) {
       break;
   }
 
-  if (graph_data[0].data != undefined && graph_data[0].data.length > 0) {
+  if (graph_data[0].data !== undefined && graph_data[0].data.length > 0) {
     var total_data_duration = (graph_data[0].data[graph_data[0].data.length - 1][0] - graph_data[0].data[0][0]) / 3600000;
+
+    if (graph_data.length > 1 && graph_data[1].data !== undefined && graph_data[1].data.length > 0) {
+      var new_duration = (graph_data[1].data[graph_data[1].data.length - 1][0] - graph_data[1].data[0][0]) / 3600000;
+      total_data_duration = new_duration > total_data_duration ? new_duration : total_data_duration
+    }
+    if (graph_data.length > 2 && graph_data[2].data !== undefined && graph_data[2].data.length > 0) {
+      var new_duration = (graph_data[2].data[graph_data[2].data.length - 1][0] - graph_data[2].data[0][0]) / 3600000;
+      total_data_duration = new_duration > total_data_duration ? new_duration : total_data_duration
+    }
     graph_options.xaxis.tickSize[0] = Math.round(total_data_duration * 2.5);
   }
 
@@ -1261,28 +1418,30 @@ function history_graph(name, data, type) {
     if (type == 'switch') {
       var usage = '';
       if (data.totals !== undefined) {
-        if (data.totals.power_wattage.duration > 0) {
-          usage = '{{_('Duration')}}: ' + moment.duration(data.totals.power_wattage.duration * 1000).humanize()
+        if (data.totals.duration > 0) {
+          usage = '{{_('Duration')}}: ' + moment.duration(data.totals.duration * 1000).humanize()
         }
-        if (data.totals.power_wattage.wattage > 0) {
-          usage += (usage != '' ? ' - ' : '') + '{{_('Total power in kWh')}}: ' + formatNumber(data.totals.power_wattage.wattage / (3600 * 1000));
+        if (data.totals.power_wattage > 0) {
+          usage += (usage != '' ? ' - ' : '') + '{{_('Total power in kWh')}}: ' + formatNumber(data.totals.power_wattage / (3600 * 1000));
         }
-        if (data.totals.water_flow.water > 0) {
-          usage += (usage != '' ? ' - ' : '') + '{{_('Total water in L')}}: ' + formatNumber(data.totals.water_flow.water);
+        if (data.totals.water_flow > 0) {
+          usage += (usage != '' ? ' - ' : '') + '{{_('Total water in L')}}: ' + formatNumber(data.totals.water_flow);
         }
       }
       $('#' + name + ' .total_usage').text(usage);
     } else if (type == 'door') {
       var usage = '';
       if (data.totals !== undefined) {
-        usage = '{{_('Total open for')}}: ' + moment.duration(data.totals.duration * 1000).humanize();
+        if (data.totals.duration > 0) {
+          usage = '{{_('Total open for')}}: ' + moment.duration(data.totals.duration * 1000).humanize();
+        }
       }
       $('#' + name + ' .total_usage').text(usage);
     }
     $('#' + name + ' .history_graph').bind('plothover', function (event, pos, item) {
       if (item) {
-        $('#tooltip').css({top: item.pageY-5, left: item.pageX-5});
-        $('#tooltip span').attr('data-original-title',moment(item.datapoint[0]).format('LLL') + '<br />' + item.series.label + ' ' + item.series.yaxis.tickFormatter(item.datapoint[1],item.series.yaxis));
+        $('#tooltipGraph').attr('data-original-title',moment(item.datapoint[0]).format('LLL') + '<br />' + item.series.label + ' ' + item.series.yaxis.tickFormatter(item.datapoint[1],item.series.yaxis));
+        $('#tooltipGraph').css({top: item.pageY-5, left: item.pageX-5, display:'block'});
       }
     });
   }
@@ -1501,7 +1660,7 @@ function update_dashboard_power_usage(data) {
   update_dashboard_tile('power_wattage', formatNumber(data.current) + '/' + formatNumber(data.max));
   $("#power_wattage .progress-bar-success").css('height', (data.max > 0 ? (data.current / data.max) * 100 : 0) + '%');
 
-  update_dashboard_tile('total_power',formatNumber(data.total / (3600 * 1000))); // from total watt to KiloWattHours
+  update_dashboard_tile('total_power',formatNumber(data.total / 3600 / 1000)); // from total watt to KiloWattHours
   $("#total_power .count_bottom .costs").text(formatCurrency(data.price,2,3));
   $("#total_power .count_bottom .duration").text(moment.duration(data.duration * 1000).humanize());
 }
@@ -1521,18 +1680,28 @@ function update_dashboard_environment(name, data) {
   if (data === undefined) {
     return false;
   }
-
   var systempart = $('div.environment_' + name);
+  if (!data.enabled) {
+    systempart.find('h4').removeClass('orange blue red').addClass('');
+    systempart.find('h4 small span').hide().filter('.disabled').show();
+    systempart.find('table').toggle(false);
+    setContentHeight();
+    return false;
+  }
+
   var enabledColor = '';
   var indicator = globals.temperature_indicator;
   switch (name) {
     case 'light':
       enabledColor = 'orange';
-      break;
-    case 'heater':
+      break
+    case 'conductivity':
+      enabledColor = 'orange';
+      indicator = 'mS';
+      break
+    case 'temperature':
       enabledColor = 'red';
       break;
-    case 'sprayer':
     case 'humidity':
     case 'moisture':
       indicator = '%';
@@ -1540,25 +1709,48 @@ function update_dashboard_environment(name, data) {
       break;
     case 'watertank':
       indicator = 'L';
-    case 'cooler':
       enabledColor = 'blue';
       break;
     case 'ph':
+      indicator = 'pH';
       enabledColor = 'green';
+      break;
+    case 'fertility':
+      enabledColor = 'green';
+      indicator = 'µS/cm';
+      break;
+    case 'co2':
+      enabledColor = 'green';
+      indicator = 'ppm';
+      break;
+    case 'volume':
+      enabledColor = 'blue';
+      indicator = 'L';
       break;
   }
 
   systempart.find('h4').removeClass('orange blue red').addClass(data.enabled ? enabledColor : '');
-  systempart.find('h4 small span').hide().filter('.' + (data.enabled ? data.mode : 'disabled')).show();
-  if (data.sensors !== undefined && data.sensors.length > 0) {
+  systempart.find('h4 small span').hide().filter('.' + data.config.mode).show();
+
+  if (data.config.sensors !== undefined && data.config.sensors.length > 0) {
     systempart.find('h4 small span.sensor').show();
   }
+
+  // Hide power state when there are no power switches enabled
+  var power_switches = false;
+  if (data.config.alarm_min !== undefined && data.config.alarm_min.powerswitches !== undefined) {
+    power_switches = power_switches || data.config.alarm_min.powerswitches.length > 0;
+  }
+  if (data.config.alarm_max !== undefined && data.config.alarm_max.powerswitches !== undefined) {
+    power_switches = power_switches || data.config.alarm_max.powerswitches.length > 0;
+  }
+  systempart.find('td.state').parent().toggle(power_switches);
 
   $.each(data, function(key, value) {
     switch (key) {
       case 'state':
         // Find all i elements withing the .state table row. Hide them all, then filter the enabled one and show that. Then go up and show the complete state table row... Nice!
-        systempart.find('.state i').hide().filter('.' + (value == 'on' ? 'green' : 'red')).show().parent().parent().toggle(data.enabled && data.power_switches.length > 0);
+        if (power_switches) systempart.find('.state i').hide().filter('.' + (value ? 'green' : 'red')).show().parent().parent().toggle(true);
         break;
 
       case 'alarm':
@@ -1569,30 +1761,33 @@ function update_dashboard_environment(name, data) {
         systempart.find('span.glyphicon-exclamation-sign').toggle(value);
         break;
 
-      case 'on':
-      case 'off':
-        systempart.find('.' + key).text(moment(value,'HH:mm').format('LT')).parent().toggle(data.mode != 'sensor');
-        systempart.find('.duration').text(moment.duration(data.duration * 1000).humanize()).parent().toggle(data.mode != 'sensor');
-        break;
-
       case 'current':
-        systempart.find('.' + key).text(formatNumber(value,3) + ' ' + indicator).parent().toggle(data.mode === 'sensor' || data.sensors.length > 0);
+        systempart.find('.' + key).text(formatNumber(value,3) + ' ' + indicator).parent().toggle(data.config.mode === 'sensor' || data.config.sensors.length > 0);
         break;
 
       case 'alarm_min':
       case 'alarm_max':
-        if (['heater','cooler'].indexOf(name) != -1) {
-          systempart.find('.' + key).text(formatNumber(data.alarm_min,1) + ' - ' + formatNumber(data.alarm_max,1) + ' ' + indicator).parent().toggle(data.mode === 'sensor' || data.sensors.length > 0);
-        } else {
-          systempart.find('.' + key).text(formatNumber(value,3) + ' ' + indicator).parent().toggle(data.mode === 'sensor' || data.sensors.length > 0);
-        }
+        systempart.find('.' + key).text(formatNumber(data.alarm_min,1) + ' - ' + formatNumber(data.alarm_max,1) + ' ' + indicator).parent().toggle(data.config.mode === 'sensor' || data.config.sensors.length > 0);
         break;
 
-      case 'night_difference':
-        systempart.find('.' + key).text(formatNumber(value,3) + ' ' + indicator).parent().toggle(data.night_difference != 0);
+      case 'is_night':
+        if (data.config.day_night_difference > 0) {
+          systempart.find('.day_night_difference').text(formatNumber(data.config.day_night_difference,3) + ' ' + indicator).parent().toggle(data.config.day_night_difference != 0);
+        }
+        systempart.find('span.day, span.night').hide();
+        systempart.find('span.' + (value ? 'night' : 'day')).show();
+        break;
+
+      case 'timer_min':
+      case 'timer_max':
+        if (value.time_table != undefined && ('timer_min' == key && data.config.alarm_min.powerswitches.length > 0 || 'timer_max' == key && data.config.alarm_max.powerswitches.length > 0 )) {
+          systempart.find('.' + key).text(moment(value.time_table[0][0] * 1000).format('LT') + ' - ' + moment(value.time_table[value.time_table.length-1][1] * 1000).format('LT')).parent().toggle(data.config.mode != 'sensor');
+          systempart.find('.' + key + '.duration').text(moment.duration(value.duration * 1000).humanize()).parent().toggle(data.config.mode != 'sensor');
+        }
         break;
     }
   });
+
   systempart.find('table').toggle(data.enabled);
   setContentHeight();
 }
@@ -1662,6 +1857,10 @@ function update_sensor(data) {
   content_row.find('h2').hide().filter('.' + data.type).show();
   // Update title
   content_row.find('h2 span.title').text(data.name);
+  if ('miflora' == data.hardwaretype) {
+    content_row.find('h2 span.title').append(' <span class="small">' + data.firmware + ' <i class="fa fa-plug"></i>' + data.battery + '%</span>')
+  }
+
   // Set the values only when empty
   content_row.find('input:not(.knob), select').each(function(counter,item) {
     if (item.name !== undefined && item.name !== '') {
@@ -1681,6 +1880,14 @@ function update_sensor(data) {
       }
     }
   });
+
+  // Open or hide the dimmer values (will not trigger on the select field)
+  if ('chirp' === data.hardwaretype) {
+    content_row.find('.row.chirp_calibration').show();
+  } else {
+    // Remove dimmer row, else form submit is 'stuck' on hidden fields that have invalid patterns... :(
+    content_row.find('.row.chirp_calibration').remove();
+  }
 }
 
 function add_sensor_setting_row(data) {
@@ -1701,8 +1908,17 @@ function add_sensor_setting_row(data) {
     minimumResultsForSearch: Infinity
   }).on('change',function() {
     if (this.name.indexOf('hardwaretype') >= 0) {
+      var chirp_sensor = ('chirp' === this.value);
+      if (chirp_sensor) {
+        $(this).parents('.x_content').find('.row.chirp_calibration input').attr('required','required');
+      } else {
+        $(this).parents('.x_content').find('.row.chirp_calibration input').removeAttr('required');
+      }
+      $(this).parents('.x_content').find('.row.chirp_calibration').toggle(chirp_sensor);
+
       var address_field = $("input[name='" + this.name.replace('hardwaretype','address') + "']");
       address_field.attr("readonly", this.value == 'owfs' || this.value == 'w1').off('change');
+
 /*
       if ('remote' === this.value) {
         address_field.on('change',function(){
@@ -1752,6 +1968,14 @@ function toggle_power_switch(id) {
   });
 }
 
+function toggle_power_manual_mode(id) {
+  $.post('/api/switch/manual_mode/' + id,function(data){
+    if (data.ok) {
+      $('div.row.switch#powerswitch_' + id).find('h2 span.manual_mode').toggle();
+    }
+  });
+}
+
 function add_power_switch_status_row(data) {
   if (source_row === null || source_row === '') {
     return false;
@@ -1763,7 +1987,7 @@ function add_power_switch_status_row(data) {
   new_row.attr('id','powerswitch_' + data.id);
 
   // Change the toggle icon with a slider knob
-  if ('pwm-dimmer' === data.hardwaretype || 'remote-dimmer' === data.hardwaretype) {
+  if ('pwm-dimmer' === data.hardwaretype || 'remote-dimmer' === data.hardwaretype || 'dc-dimmer' === data.hardwaretype) {
     new_row.find('div.x_content div.power_switch')
       .removeClass('big')
       .addClass('dimmer')
@@ -1788,6 +2012,10 @@ function add_power_switch_status_row(data) {
       toggle_power_switch($(this).parentsUntil('div.row.switch').parent().attr('id').split('_')[1]);
     });
   }
+  new_row.find('a.manual_mode').on('click',function(){
+    toggle_power_manual_mode($(this).parentsUntil('div.row.switch').parent().attr('id').split('_')[1]);
+  });
+
   if (data.timer_enabled) {
       new_row.find('div.power_switch span.glyphicon').append($('<span>').addClass('glyphicon glyphicon glyphicon-time'));
       new_row.find('div.power_switch.dimmer div').append($('<span>').addClass('glyphicon glyphicon glyphicon-time'));
@@ -1814,6 +2042,7 @@ function update_power_switch(data) {
   content_row.find('span.glyphicon').removeClass('blue green').addClass((on ? 'green' : 'blue'));
   content_row.find('h2 span.title').text(data.name);
   content_row.find('h2 small.current_usage').text(current_status_data);
+  content_row.find('h2 span.manual_mode').toggle(data.manual_mode);
   //switch_row.find('.knob').val(power_switch.state).trigger('change');
 
   // Set the values only when empty
@@ -1840,7 +2069,7 @@ function update_power_switch(data) {
   });
 
   // Open or hide the dimmer values (will not trigger on the select field)
-  if ('pwm-dimmer' === data.hardwaretype || 'remote-dimmer' === data.hardwaretype) {
+  if ('pwm-dimmer' === data.hardwaretype || 'remote-dimmer' === data.hardwaretype || 'dc-dimmer' === data.hardwaretype) {
     content_row.find('.row.dimmer').show();
   } else {
     // Remove dimmer row, else form submit is 'stuck' on hidden fields that have invalid patterns... :(
@@ -2066,7 +2295,7 @@ function add_door() {
 
 /* Webcam code */
 function createWebcamLayer(webcamid, maxzoom) {
-  return L.tileLayer('/webcam/{id}_tile_{z}_{x}_{y}.jpg?_{time}', {
+  return L.tileLayer('/webcam/{id}/{id}_tile_{z}_{x}_{y}.jpg?_{time}', {
     time: function() {
       return (new Date()).valueOf();
     },
@@ -2079,9 +2308,28 @@ function createWebcamLayer(webcamid, maxzoom) {
 }
 
 function webcamArchive(webcamid) {
-   $.getJSON('api/webcams/' + webcamid + '/archive', function(data) {
+
+  var now = new Date();
+  var max_days_back = 50;
+  var no_data_counter = 0;
+  var fancybox = null;
+
+  function getImages(date) {
+
+    $.getJSON('api/webcams/' + webcamid + '/archive/'+ date.getFullYear() + '/' + (date.getMonth() < 9 ? '0' : '') + (date.getMonth() + 1) + '/' + (date.getDate() < 10 ? '0' : '') + date.getDate(), function(data) {
     var photos = [];
     var date_match = /archive_(\d+)\.jpg$/g;
+
+    no_data_counter += (data.webcams[0].archive_images.length > 0 ? 0 : 1);
+    max_days_back--
+
+    if (no_data_counter > 10 || max_days_back < 0) {
+
+      console.log('Done lading:',no_data_counter,max_days_back);
+
+      return false;
+    }
+
     $.each(data.webcams[0].archive_images, function(index,value) {
       value.match(date_match);
       var date_photo = date_match.exec(value);
@@ -2090,22 +2338,35 @@ function webcamArchive(webcamid) {
       } else {
         date_photo = '{{_('Unknown date')}}';
       }
-      photos.push({src : value,
-                  opts: { caption: '{{_('Webcam')}}' + ' ' + data.webcams[0].name + ': ' + date_photo}})
+
+      if (fancybox == null) {
+      fancybox = $.fancybox.open(
+        [{src : value,opts: { caption: '{{_('Webcam')}}' + ' ' + data.webcams[0].name + ': ' + date_photo}}],
+        {loop : false,
+         buttons : [
+                   //'slideShow',
+                   'fullScreen',
+                   'thumbs',
+                   //'share',
+                   'download',
+                   'zoom',
+                   'close'
+                ],
+         thumbs : {
+           autoStart : true
+          }
+        });
+      } else {
+        fancybox.addContent({src : value, opts: { caption: '{{_('Webcam')}}' + ' ' + data.webcams[0].name + ': ' + date_photo}});
+      }
     });
-    $.fancybox.open(photos,
-                    {loop : false,
-                     buttons : [
-                        'slideShow',
-                        'fullScreen',
-                        'thumbs',
-                        //'share',
-                        'download',
-                        'zoom',
-                        'close'
-                     ]}
-                );
-  });
+    // recursive
+    setTimeout(function(){
+      getImages(new Date(date.getTime() - (24 * 60 * 60 * 1000)));
+      }, 5000);
+    });
+  }
+  getImages(now);
 }
 
 function initWebcam(data) {
@@ -2121,51 +2382,64 @@ function initWebcam(data) {
   // Resize the height to get the maps working
   webcam_row.find('div.webcam_player').attr('id','webcam_' + data.id).height(webcam_row.width()-webcam_row.find('.x_title').height());
 
-  // Load Leaflet webcam code
-  var webcam = new L.Map('webcam_' + data.id, {
-    layers: [createWebcamLayer(data.id, data.max_zoom)],
-    fullscreenControl: true,
-  }).setView([0, 0], 1);
+  if (data.is_live) {
+    // Load HLS player
+    var player = new Clappr.Player({source: 'webcam/' + data.id + '/stream.m3u8',
+                                    parentId: '#webcam_' + data.id,
+                                    width: '100%',
+                                    height: '100%',
+                                    autoPlay: true,
+                                    chromeless: false});
 
-  L.Control.ExtraWebcamControls = L.Control.extend({
-    options: {
-      position: 'topleft',
-      archive: data.archive
-    },
-    initialize: function (options) {
-      // constructor
-      L.Util.setOptions(this, options);
-    },
-    onAdd: function (map) {
-      var container = L.DomUtil.create('div', 'leaflet-control-takephoto leaflet-bar leaflet-control');
+    webcam_row.find('ul.nav.navbar-right.panel_toolbox li.dropdown ul.dropdown-menu' ).append('<li><a href="/webcam/' + data.id + '/' + data.id + '_raw.jpg" target="_blank">{{_('Save RAW photo')}}</a></li>')
+    webcam_row.find('ul.nav.navbar-right.panel_toolbox li.dropdown ul.dropdown-menu' ).append('<li><a href="javascript:;" onclick="webcamArchive(\'' + data.id + '\');">{{_('Archive')}}</a></li>')
+  } else {
+    // Load Leaflet webcam code
+    var webcam = new L.Map('webcam_' + data.id, {
+      layers: [createWebcamLayer(data.id, data.max_zoom)],
+      fullscreenControl: true,
+    }).setView([0, 0], 1);
 
-      this.photo_link = L.DomUtil.create('a', 'leaflet-control-takephoto-button leaflet-bar-part', container);
-      this.photo_link.title = '{{_('Save RAW photo')}}';
-      this.photo_link.target = '_blank';
-      this.photo_link.href = '/webcam/' + data.id + '_raw.jpg';
-      L.DomUtil.create('i', 'fa fa-camera', this.photo_link);
+    L.Control.ExtraWebcamControls = L.Control.extend({
+      options: {
+        position: 'topleft',
+        archive: data.archive
+      },
+      initialize: function (options) {
+        // constructor
+        L.Util.setOptions(this, options);
+      },
+      onAdd: function (map) {
+        var container = L.DomUtil.create('div', 'leaflet-control-takephoto leaflet-bar leaflet-control');
 
-      if (this.options.archive) {
-        this.archive_link = L.DomUtil.create('a', 'leaflet-control-archive-button leaflet-bar-part', container);
-        this.archive_link.href = '#';
-        this.archive_link.title = '{{_('Archive')}}';
-        L.DomEvent.on(this.archive_link, 'click', this._start_archive, this);
-        L.DomUtil.create('i', 'fa fa-archive', this.archive_link);
+        this.photo_link = L.DomUtil.create('a', 'leaflet-control-takephoto-button leaflet-bar-part', container);
+        this.photo_link.title = '{{_('Save RAW photo')}}';
+        this.photo_link.target = '_blank';
+        this.photo_link.href = '/webcam/' + data.id + '/' + data.id + '_raw.jpg';
+        L.DomUtil.create('i', 'fa fa-camera', this.photo_link);
+
+        if (this.options.archive) {
+          this.archive_link = L.DomUtil.create('a', 'leaflet-control-archive-button leaflet-bar-part', container);
+          this.archive_link.href = '#';
+          this.archive_link.title = '{{_('Archive')}}';
+          L.DomEvent.on(this.archive_link, 'click', this._start_archive, this);
+          L.DomUtil.create('i', 'fa fa-archive', this.archive_link);
+        }
+
+        return container;
+      },
+      _start_archive: function (e) {
+          L.DomEvent.stopPropagation(e);
+          L.DomEvent.preventDefault(e);
+          webcamArchive(data.id);
       }
+    });
+    webcam.addControl(new L.Control.ExtraWebcamControls());
+    webcam.addControl(L.Control.loading({separate: true}));
 
-      return container;
-    },
-    _start_archive: function (e) {
-        L.DomEvent.stopPropagation(e);
-        L.DomEvent.preventDefault(e);
-        webcamArchive(data.id);
-    }
-  });
-  webcam.addControl(new L.Control.ExtraWebcamControls());
-  webcam.addControl(L.Control.loading({separate: true}));
-
-  globals.webcams[webcam._container.id] = null;
-  updateWebcamView(webcam);
+    globals.webcams[webcam._container.id] = null;
+    updateWebcamView(webcam);
+  }
 }
 
 function updateWebcamView(webcam) {
@@ -2525,6 +2799,7 @@ function edit_profile() {
   $('form#profile').toggleClass('edit');
   if ($('form#profile').hasClass('edit')) {
     init_wysiwyg();
+
     $('input[name="age"]').daterangepicker({
       singleDatePicker: true,
     });
@@ -2553,7 +2828,35 @@ function uploadProfileImage() {
 }
 /* End profile code */
 
+/**
+ * Sort values alphabetically in select
+ * source: http://stackoverflow.com/questions/12073270/sorting-options-elements-alphabetically-using-jquery
+ */
+$.fn.extend({
+  sortSelect() {
+    let options = this.find("option"),
+      arr = options.map(function(_, o) { return { t: $(o).text(), v: o.value }; }).get();
 
+    arr.sort((o1, o2) => { // sort select
+      let t1 = o1.t.toLowerCase(),
+          t2 = o2.t.toLowerCase();
+      return t1 > t2 ? 1 : t1 < t2 ? -1 : 0;
+    });
+
+    options.each((i, o) => {
+      o.value = arr[i].v;
+      $(o).text(arr[i].t);
+    });
+  }
+});
+
+function terrariumpi_select2_option(state){
+  if (!state.id) {
+    return state.text;
+  }
+  return $('<div class="terrariumpi_select2_option" title="' + state.text + '">' + state.text + '</div>');
+}
+$.fn.select2.defaults.set("templateResult", terrariumpi_select2_option);
 // Start it all.....
 $(document).ready(function() {
   moment.locale(globals.language);
@@ -2583,9 +2886,11 @@ $(document).ready(function() {
     $(this).on('click', load_page).attr('title',$(this).parents('li').find('a:first').text());
   });
 
-  $("<div id='tooltip'><span title='tooltip' id='tooltiptext' data-toggle='tooltip'>&nbsp;&nbsp;&nbsp;</span></div>").css({
+  $("<div id='tooltipGraph' title='tooltip'>&nbsp;&nbsp;&nbsp;</div>").css({
       position: "absolute",
-	}).appendTo("body");
+  }).appendTo("body").tooltip({html:true}).on('hidden.bs.tooltip',function(event){
+    $('#tooltipGraph').hide();
+  })
 
   load_door_history();
   load_player_status();

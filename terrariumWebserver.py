@@ -3,7 +3,7 @@ import terrariumLogging
 logger = terrariumLogging.logging.getLogger(__name__)
 
 import gettext
-gettext.install('terrariumpi', 'locales/', unicode=True)
+gettext.install('terrariumpi', 'locales/')
 
 from bottle import BaseRequest, Bottle, request, abort, static_file, template, error, response, auth_basic, HTTPError
 #Increase bottle memory to max 5MB to process images in WYSIWYG editor
@@ -11,13 +11,16 @@ BaseRequest.MEMFILE_MAX = 5 * 1024 * 1024
 
 from bottle.ext.websocket import GeventWebSocketServer
 from bottle.ext.websocket import websocket
-from Queue import Queue
+from queue import Queue
 
 from terrariumTranslations import terrariumTranslations
 from terrariumAudio import terrariumAudioPlayer
 from terrariumUtils import terrariumUtils
 
-import thread
+try:
+  import thread as _thread
+except ImportError as ex:
+  import _thread
 import json
 import os
 import datetime
@@ -38,7 +41,7 @@ class terrariumWebserverHeaders(object):
         t = os.path.getmtime(template_file)
         #response.headers['Expires'] = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%a, %d %b %Y %H:%M:%S GMT')
         response.headers['Last-Modified'] = datetime.datetime.fromtimestamp(t).strftime( '%a, %d %b %Y %H:%M:%S GMT')
-        response.headers['Etag'] = hashlib.md5(response.headers['Last-Modified']).hexdigest()
+        response.headers['Etag'] = hashlib.md5(response.headers['Last-Modified'].encode()).hexdigest()
 
       return fn(*args, **kwargs)
 
@@ -68,19 +71,23 @@ class terrariumWebserver(object):
 
     def decorator(func):
 
-        @functools.wraps(func)
-        def wrapper(*a, **ka):
-            user, password = request.auth or (None, None)
-            if required or terrariumUtils.is_true(self.__terrariumEngine.config.get_system()['always_authenticate']):
+      @functools.wraps(func)
+      def wrapper(*a, **ka):
 
-              if user is None or not check(user, password):
-                  err = HTTPError(401, text)
-                  err.add_header('WWW-Authenticate', 'Basic realm="%s"' % realm)
-                  return err
+        if required or terrariumUtils.is_true(self.__terrariumEngine.config.get_system()['always_authenticate']):
+          user, password = request.auth or (None, None)
+          ip = request.remote_addr if request.get_header('X-Real-Ip') is None else request.get_header('X-Real-Ip')
+          if user is None or not check(user, password):
+            err = HTTPError(401, text)
+            err.add_header('WWW-Authenticate', 'Basic realm="%s"' % realm)
+            if user is not None or password is not None:
+              self.__terrariumEngine.notification.message('authentication_warning',{'ip' : ip, 'username' : user, 'password' : password},[])
+              logger.warning('Incorrect login detected using username \'{}\' and password \'{}\' from ip {}'.format(user,password,ip))
+            return err
 
-            return func(*a, **ka)
+        return func(*a, **ka)
 
-        return wrapper
+      return wrapper
 
     return decorator
 
@@ -103,13 +110,22 @@ class terrariumWebserver(object):
 
     self.__app.route('/<filename:re:robots\.txt>',
                      method="GET",
-                     callback=self.__static_file,
-                     apply=self.__authenticate(False))
+                     callback=self.__static_file)
+
+    self.__app.route('/<root:re:static/extern>/<filename:path>',
+                     method="GET",
+                     callback=self.__static_file)
 
     self.__app.route('/<root:re:(static|gentelella|webcam|audio|log)>/<filename:path>',
                      method="GET",
                      callback=self.__static_file,
                      apply=self.__authenticate(False))
+
+    self.__app.route('/api/<path:re:(config/notifications)>',
+                     method=['GET'],
+                     callback=self.__get_api_call,
+                     apply=self.__authenticate(True)
+                    )
 
     self.__app.route('/api/<path:path>',
                      method=['GET'],
@@ -122,13 +138,19 @@ class terrariumWebserver(object):
                      apply=self.__authenticate(True)
                     )
 
+    self.__app.route('/api/switch/manual_mode/<switchid:path>',
+                     method=['POST'],
+                     callback=self.__manual_mode_switch,
+                     apply=self.__authenticate(True)
+                    )
+
     self.__app.route('/api/switch/state/<switchid:path>/<value:int>',
                      method=['POST'],
                      callback=self.__state_switch,
                      apply=self.__authenticate(True)
                     )
 
-    self.__app.route('/api/config/<path:re:(system|weather|switches|sensors|webcams|doors|audio|environment|profile)>',
+    self.__app.route('/api/config/<path:re:(system|weather|switches|sensors|webcams|doors|audio|environment|profile|notifications)>',
                      method=['PUT','POST','DELETE'],
                      callback=self.__update_api_call,
                      apply=self.__authenticate(True)
@@ -166,9 +188,12 @@ class terrariumWebserver(object):
                   'page_title' : _(template.replace('_',' ').capitalize()),
                   'temperature_indicator' : self.__terrariumEngine.get_temperature_indicator(),
                   'distance_indicator' : self.__terrariumEngine.get_distance_indicator(),
+                  'volume_indicator' : self.__terrariumEngine.get_volume_indicator(),
                   'horizontal_graph_legend' : 1 if self.__terrariumEngine.get_horizontal_graph_legend() else 0,
                   'translations': self.__translations,
-                  'device': self.__terrariumEngine.device}
+                  'device': self.__terrariumEngine.device,
+                  'notifications' : self.__terrariumEngine.notification,
+                  'show_gauge_overview' : terrariumUtils.is_true(self.__config['sensor_gauge_overview'])}
 
     if 'index' == template or 'profile' == template:
       variables['person_name'] = self.__terrariumEngine.get_profile_name()
@@ -203,7 +228,7 @@ class terrariumWebserver(object):
       staticfile.add_header('Expires',(datetime.datetime.utcnow() + datetime.timedelta(days=self.__caching_days)).strftime('%a, %d %b %Y %H:%M:%S GMT'))
 
     if staticfile.get_header('Last-Modified') is not None:
-      staticfile.add_header('Etag',hashlib.md5(staticfile.get_header('Last-Modified')).hexdigest())
+      staticfile.add_header('Etag',hashlib.md5(staticfile.get_header('Last-Modified').encode()).hexdigest())
 
     return staticfile
 
@@ -233,9 +258,9 @@ class terrariumWebserver(object):
     try:
       upload.save(terrariumAudioPlayer.AUDIO_FOLDER)
       self.__terrariumEngine.reload_audio_files()
-      result = {'ok' : True, 'title' : _('Success!'), 'message' : _('File \'%s\' is uploaded' % (upload.filename,))}
-    except IOError, message:
-      result['message'] = _('Duplicate file \'%s\'' % (upload.filename,))
+      result = {'ok' : True, 'title' : _('Success!'), 'message' : _('File \'%s\' is uploaded') % (upload.filename,)}
+    except IOError as message:
+      result['message'] = _('Duplicate file \'%s\'') % (upload.filename,)
 
     return result
 
@@ -267,7 +292,7 @@ class terrariumWebserver(object):
     return result
 
   def __get_api_call(self,path):
-    response.headers['Expires'] = (datetime.datetime.utcnow() + datetime.timedelta(minutes=1)).strftime('%a, %d %b %Y %H:%M:%S GMT')
+    response.headers['Expires'] = (datetime.datetime.utcnow() + datetime.timedelta(seconds=10)).strftime('%a, %d %b %Y %H:%M:%S GMT')
     response.headers['Access-Control-Allow-Origin'] = '*'
 
     result = {}
@@ -325,8 +350,12 @@ class terrariumWebserver(object):
     elif 'system' == action:
       result = self.__terrariumEngine.get_system_stats()
 
+    elif 'config' == action:
+      # TODO: New way of data processing.... fix other config options
+      result = self.__terrariumEngine.get_config(parameters[0] if len(parameters) == 1 else None)
+
     elif 'history' == action or 'export' == action:
-      response.headers['Expires'] = (datetime.datetime.utcnow() + datetime.timedelta(minutes=5)).strftime('%a, %d %b %Y %H:%M:%S GMT')
+      response.headers['Expires'] = (datetime.datetime.utcnow() + datetime.timedelta(minutes=1)).strftime('%a, %d %b %Y %H:%M:%S GMT')
       if 'export' == action:
         parameters.append('all')
       result = self.__terrariumEngine.get_history(parameters)
@@ -338,12 +367,12 @@ class terrariumWebserver(object):
           for dataid in result[datatype]:
             export_name = datatype + '_' + dataid + '.csv'
             # Header
-            fields = result[datatype][dataid].keys()
+            fields = list(result[datatype][dataid].keys())
             if 'totals' in fields:
               fields.remove('totals')
             csv = '"' + '","'.join(['timestamp'] + fields) + "\"\n"
 
-            for counter in xrange(0,len(result[datatype][dataid][fields[0]])):
+            for counter in range(0,len(result[datatype][dataid][fields[0]])):
               # Timestamp
               row = [datetime.datetime.fromtimestamp(int(str(int(result[datatype][dataid][fields[0]][counter][0]/1000)))).strftime('%Y-%m-%d %H:%M:%S')]
               for field in fields:
@@ -356,10 +385,6 @@ class terrariumWebserver(object):
         response.headers['Content-Disposition'] = 'attachment; filename=' + export_name;
         return csv
 
-    elif 'config' == action:
-      # TODO: New way of data processing.... fix other config options
-      result = self.__terrariumEngine.get_config(parameters[0] if len(parameters) == 1 else None)
-
     return result
 
   def __toggle_switch(self,switchid):
@@ -369,10 +394,24 @@ class terrariumWebserver(object):
 
     return {'ok' : False}
 
+  def __manual_mode_switch(self,switchid):
+    if switchid in self.__terrariumEngine.power_switches:
+      self.__terrariumEngine.power_switches[switchid].set_manual_mode(not self.__terrariumEngine.power_switches[switchid].in_manual_mode())
+      return {'ok' : True}
+
+    return {'ok' : False}
+
   def __state_switch(self,switchid,value):
     if switchid in self.__terrariumEngine.power_switches:
-      self.__terrariumEngine.power_switches[switchid].set_state(value)
-      return {'ok' : True}
+      if value == 1:
+        self.__terrariumEngine.power_switches[switchid].set_state(True)
+        return {'ok' : True}
+      elif value == 0:
+        self.__terrariumEngine.power_switches[switchid].set_state(False)
+        return {'ok' : True}
+      else:
+        self.__terrariumEngine.power_switches[switchid].set_state(value)
+        return {'ok' : True}
 
     return {'ok' : False}
 
@@ -402,7 +441,7 @@ class terrariumWebserver(object):
 
         try:
           socket.send(json.dumps(message))
-        except Exception, err:
+        except Exception as ex:
           # Socket connection is lost, stop looping....
           break
 
@@ -412,14 +451,14 @@ class terrariumWebserver(object):
       try:
 
         message = socket.receive()
-      except Exception, err:
+      except Exception as ex:
         break
 
       if message is not None:
         message = json.loads(message)
 
         if message['type'] == 'client_init':
-          thread.start_new_thread(listen_for_messages, (messages,socket))
+          _thread.start_new_thread(listen_for_messages, (messages,socket))
           terrariumWebserver.app.terrarium.subscribe(messages)
 
         terrariumWebserver.app.terrarium.get_doors_status(socket=True)
@@ -430,9 +469,9 @@ class terrariumWebserver(object):
   def start(self):
     # Start the webserver
     logger.info('Running webserver at %s:%s' % (self.__config['host'],self.__config['port']))
-    print '%s - INFO - terrariumWebserver - Running webserver at %s:%s' % (datetime.datetime.today().strftime('%Y-%m-%d %H:%M:%S,000'),
+    print('%s - INFO    - terrariumWebserver   - Running webserver at %s:%s' % (datetime.datetime.today().strftime('%Y-%m-%d %H:%M:%S,000'),
                                              self.__config['host'],
-                                             self.__config['port'])
+                                             self.__config['port']))
     self.__app.run(host=self.__config['host'],
                    port=self.__config['port'],
                    server=GeventWebSocketServer,

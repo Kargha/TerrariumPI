@@ -1,17 +1,110 @@
 # -*- coding: utf-8 -*-
+import terrariumLogging
+logger = terrariumLogging.logging.getLogger(__name__)
+
 import re
 import datetime
 import requests
+from math import log
+
+class terrariumTimer(object):
+  def __init__(self,start,stop,on_duration,off_duration,enabled):
+    self.__start = start
+    self.__stop = stop
+    self.__on_duration = on_duration
+    self.__off_duration = off_duration
+
+    self.__enabled = terrariumUtils.is_true(enabled)
+
+    self.__timer_table = []
+    self.__calculate_time_table()
+
+  def __calculate_time_table(self):
+    starttime = self.__start.split(':')
+    stoptime = self.__stop.split(':')
+    on_duration = float(self.__on_duration) * 60.0
+    off_duration = float(self.__off_duration) * 60.0
+
+    self.__timer_table = []
+    now = datetime.datetime.now()
+    starttime = now.replace(hour=int(starttime[0]), minute=int(starttime[1]), second=0)
+    stoptime = now.replace(hour=int(stoptime[0]), minute=int(stoptime[1]),second=0)
+
+    if starttime == stoptime:
+      stoptime += datetime.timedelta(hours=24)
+
+    elif starttime > stoptime:
+      if now > stoptime:
+        stoptime += datetime.timedelta(hours=24)
+      else:
+        starttime -= datetime.timedelta(hours=24)
+
+    # Calculate next day when current day is done...
+    if now > stoptime:
+      starttime += datetime.timedelta(hours=24)
+      stoptime += datetime.timedelta(hours=24)
+
+    if (on_duration is None and off_duration is None) or (0 == on_duration and 0 == off_duration):
+      # Only start and stop time. No periods
+      self.__timer_table.append((int(starttime.strftime('%s')),int(stoptime.strftime('%s'))))
+    elif on_duration is not None and off_duration is None:
+
+      if (starttime + datetime.timedelta(seconds=on_duration)) > stoptime:
+        on_duration = (stoptime - starttime).total_seconds()
+      self.__timer_table.append((int(starttime.strftime('%s')),int((starttime + datetime.timedelta(seconds=on_duration)).strftime('%s'))))
+    else:
+      # Create time periods based on both duration between start and stop time
+      while starttime < stoptime:
+        if (starttime + datetime.timedelta(seconds=on_duration)) > stoptime:
+          on_duration = (stoptime - starttime).total_seconds()
+
+        self.__timer_table.append((int(starttime.strftime('%s')),int((starttime + datetime.timedelta(seconds=on_duration)).strftime('%s'))))
+        starttime += datetime.timedelta(seconds=on_duration + off_duration)
+
+  def is_enabled(self):
+    return terrariumUtils.is_true(self.__enabled)
+
+  def is_time(self):
+    now = int(datetime.datetime.now().strftime('%s'))
+    for time_schedule in self.__timer_table:
+      if time_schedule[0] <= now < time_schedule[1]:
+        return True
+
+      elif now < time_schedule[0]:
+        return False
+
+    #End of time_table. No data to decide for today
+    self.__calculate_time_table()
+    return None
+
+  def duration(time_table):
+    duration = 0
+    for time_schedule in self.__timer_table:
+      duration += time_schedule[1] - time_schedule[0]
+
+    return duration
+
+  def get_data(self):
+    return {'timer_enabled': self.is_enabled(),
+            'timer_start': self.__start,
+            'timer_stop' : self.__stop,
+            'timer_on_duration': self.__on_duration,
+            'timer_off_duration': self.__off_duration}
+
 
 class terrariumUtils():
 
   @staticmethod
   def to_fahrenheit(value):
-    return float(9.0 / 5.0 * value + 32.0)
+    return 9.0 / 5.0 * float(value) + 32.0
 
   @staticmethod
   def to_celsius(value):
-    return float((value - 32) * 5.0 / 9.0)
+    return (float(value) - 32) * 5.0 / 9.0
+
+  @staticmethod
+  def to_kelvin(value):
+    return float(value) + 273.15
 
   @staticmethod
   def to_inches(value):
@@ -20,14 +113,24 @@ class terrariumUtils():
     return (39.370078740157 / 100.0) * float(value)
 
   @staticmethod
+  def to_us_gallons(value):
+    # https://www.asknumbers.com/gallons-to-liters.aspx
+    return float(value) / 3.7854118
+
+  @staticmethod
+  def to_uk_gallons(value):
+    # https://www.asknumbers.com/gallons-to-liters.aspx
+    return float(value) / 4.54609
+
+  @staticmethod
   def is_float(value):
-    if value is None:
+    if value is None or '' == value:
       return False
 
     try:
       float(value)
       return True
-    except ValueError:
+    except Exception:
       return False
 
   @staticmethod
@@ -66,7 +169,7 @@ class terrariumUtils():
               'gpio40' : 21
               }
 
-    index = 'gpio' + str(value)
+    index = 'gpio' + str(value).strip()
     if index in pinout:
       return pinout[index]
 
@@ -104,7 +207,7 @@ class terrariumUtils():
               'BCM21' : 40
               }
 
-    index = 'BCM' + str(value)
+    index = 'BCM' + str(value).strip()
     if index in pinout:
       return pinout[index]
 
@@ -116,7 +219,7 @@ class terrariumUtils():
     if '' == url:
       return False
 
-    regex = ur"^((?P<scheme>https?|ftp):\/)?\/?((?P<username>.*?)(:(?P<password>.*?)|)@)?(?P<hostname>[^:\/\s]+)(:(?P<port>(\d*))?)?(?P<path>(\/\w+)*\/)(?P<filename>[-\w.]+[^#?\s]*)?(?P<query>\?([^#]*))?(#(?P<fragment>(.*))?)?$"
+    regex = r"^((?P<scheme>https?|ftp):\/)?\/?((?P<username>.*?)(:(?P<password>.*?)|)@)?(?P<hostname>[^:\/\s]+)(:(?P<port>(\d*))?)?(?P<path>(\/\w+)*\/)(?P<filename>[-\w.]+[^#?\s]*)?(?P<query>\?([^#]*))?(#(?P<fragment>(.*))?)?$"
     matches = re.search(regex, url)
     if matches:
       return matches.groupdict()
@@ -130,36 +233,44 @@ class terrariumUtils():
       try:
         value = value.split(':')
         time = "{:0>2}:{:0>2}".format(int(value[0])%24,int(value[1])%60)
-      except Exception, err:
-        print 'Error in terrariumUtils.parse_time'
-        print err
+      except Exception as ex:
+        logger.exception('Error parsing time value %s. Exception %s' % (value, ex))
 
     return time
 
   @staticmethod
-  def get_remote_data(url):
+  def get_remote_data(url, timeout = 3, proxy = None):
     data = None
     try:
       url_data = terrariumUtils.parse_url(url)
-      data = requests.get(url,auth=(url_data['username'],url_data['password']),timeout=3)
+      proxies = {'http' : proxy, 'https' : proxy}
+      if url_data['username'] is None:
+        response = requests.get(url,timeout=timeout,proxies=proxies)
+      else:
+        response = requests.get(url,auth=(url_data['username'],url_data['password']),timeout=timeout,proxies=proxies)
 
-      if data.status_code == 200:
-        data = data.json()
-        json_path = url_data['fragment'].split('/') if 'fragment' in url_data and url_data['fragment'] is not None else []
+      if response.status_code == 200:
+        if 'application/json' in response.headers['content-type']:
+          data = response.json()
+          json_path = url_data['fragment'].split('/') if 'fragment' in url_data and url_data['fragment'] is not None else []
+          for item in json_path:
+            # Dirty hack to process array data....
+            try:
+              item = int(item)
+            except Exception as ex:
+              item = str(item)
 
-        for item in json_path:
-          # Dirty hack to process array data....
-          try:
-            item = int(item)
-          except Exception, ex:
-            item = str(item)
+            data = data[item]
+        elif 'text' in response.headers['content-type']:
+          data = response.text
+        else:
+          data = response.content
 
-          data = data[item]
       else:
         data = None
 
-    except Exception, ex:
-      print ex
+    except Exception as ex:
+      logger.exception('Error parsing remote data at url %s. Exception %s' % (url, ex))
 
     return data
 
@@ -169,10 +280,10 @@ class terrariumUtils():
 
     now = datetime.datetime.now()
     starttime = start.split(':')
-    starttime = now.replace(hour=int(starttime[0]), minute=int(starttime[1]))
+    starttime = now.replace(hour=int(starttime[0]), minute=int(starttime[1]), second=0)
 
     stoptime = stop.split(':')
-    stoptime = now.replace(hour=int(stoptime[0]), minute=int(stoptime[1]))
+    stoptime = now.replace(hour=int(stoptime[0]), minute=int(stoptime[1]),second=0)
 
     if starttime == stoptime:
       stoptime += datetime.timedelta(hours=24)
@@ -188,7 +299,7 @@ class terrariumUtils():
       starttime += datetime.timedelta(hours=24)
       stoptime += datetime.timedelta(hours=24)
 
-    if on_duration is None and off_duration is None:
+    if (on_duration is None and off_duration is None) or (0 == on_duration and 0 == off_duration):
       # Only start and stop time. No periods
       timer_time_table.append((int(starttime.strftime('%s')),int(stoptime.strftime('%s'))))
     elif on_duration is not None and off_duration is None:
@@ -211,7 +322,7 @@ class terrariumUtils():
   def is_time(time_table):
     now = int(datetime.datetime.now().strftime('%s'))
     for time_schedule in time_table:
-      if time_schedule[0] < now < time_schedule[1]:
+      if time_schedule[0] <= now < time_schedule[1]:
         return True
 
       elif now < time_schedule[0]:
@@ -227,3 +338,31 @@ class terrariumUtils():
       duration += time_schedule[1] - time_schedule[0]
 
     return duration
+
+  @staticmethod
+  # https://stackoverflow.com/a/19647596
+  def flatten_dict(dd, separator='_', prefix=''):
+    return { prefix + separator + k if prefix else k : v
+             for kk, vv in list(dd.items())
+             for k, v in list(terrariumUtils.flatten_dict(vv, separator, kk).items())
+             } if isinstance(dd, dict) else { prefix : dd if not isinstance(dd,list) else ','.join(dd)}
+
+  @staticmethod
+  def format_uptime(value):
+    return str(datetime.timedelta(seconds=int(value)))
+
+  @staticmethod
+  def format_filesize(n,pow=0,b=1024,u='B',pre=['']+[p+'i'for p in'KMGTPEZY']):
+    pow,n=min(int(log(max(n*b**pow,1),b)),len(pre)-1),n*b**pow
+    return "%%.%if %%s%%s"%abs(pow%(-pow-1))%(n/b**float(pow),pre[pow],u)
+
+# works in Python 2 & 3
+class _Singleton(type):
+    """ A metaclass that creates a Singleton base class when called. """
+    _instances = {}
+    def __call__(cls, *args, **kwargs):
+      if cls not in cls._instances:
+        cls._instances[cls] = super(_Singleton, cls).__call__(*args, **kwargs)
+      return cls._instances[cls]
+
+class terrariumSingleton(_Singleton('terrariumSingletonMeta', (object,), {})): pass

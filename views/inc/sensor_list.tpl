@@ -8,13 +8,16 @@
           <div class="col-md-12 col-sm-12 col-xs-12">
             <div class="x_panel">
               <div class="x_title">
-                <h2 class="temperature"><span aria-hidden="true" class="glyphicon glyphicon-fire"></span> {{_('Temperature sensor')}} <span class="title">{{_('new')}}</span> <small>...</small> <span class="badge bg-red">{{_('warning')}}</span> <span class="badge bg-orange">{{_('error')}}</span></h2>
-                <h2 class="humidity"><span aria-hidden="true" class="glyphicon glyphicon-tint"></span> {{_('Humidity sensor')}} <span class="title">{{_('new')}}</span> <small>...</small> <span class="badge bg-red">{{_('warning')}}</span> <span class="badge bg-orange">{{_('error')}}</span></h2>
-                <h2 class="moisture"><span aria-hidden="true" class="glyphicon glyphicon-tint"></span> {{_('Moisture sensor')}} <span class="title">{{_('new')}}</span> <small>...</small> <span class="badge bg-red">{{_('warning')}}</span> <span class="badge bg-orange">{{_('error')}}</span></h2>
-                <h2 class="conductivity"><span aria-hidden="true" class="glyphicon glyphicon-oil"></span> {{_('Conductivity sensor')}} <span class="title">{{_('new')}}</span> <small>...</small> <span class="badge bg-red">{{_('warning')}}</span> <span class="badge bg-orange">{{_('error')}}</span></h2>
-                <h2 class="distance"><span aria-hidden="true" class="glyphicon glyphicon-signal"></span> {{_('Distance sensor')}} <span class="title">{{_('new')}}</span> <small>...</small> <span class="badge bg-red">{{_('warning')}}</span> <span class="badge bg-orange">{{_('error')}}</span></h2>
-                <h2 class="ph"><span aria-hidden="true" class="glyphicon glyphicon-scale"></span> {{_('pH sensor')}} <span class="title">{{_('new')}}</span> <small>...</small> <span class="badge bg-red">{{_('warning')}}</span> <span class="badge bg-orange">{{_('error')}}</span></h2>
-                <h2 class="light"><span aria-hidden="true" class="glyphicon glyphicon-adjust"></span> {{_('Light sensor')}} <span class="title">{{_('new')}}</span> <small>...</small> <span class="badge bg-red">{{_('warning')}}</span> <span class="badge bg-orange">{{_('error')}}</span></h2>
+                <h2 class="temperature"><span aria-hidden="true" class="glyphicon glyphicon-fire"></span> {{_('Temperature sensor')}} <span class="title">{{_('new')}}</span> <small>...</small> <span class="badge bg-red" title="{{_('warning')}}">{{_('warning')}}</span> <span class="badge bg-orange" title="{{_('error')}}">{{_('error')}}</span> <span class="badge bg-blue" title="{{_('Excluded from average calculation')}}">{{_('excl. avg')}}</span></h2>
+                <h2 class="humidity"><span aria-hidden="true" class="glyphicon glyphicon-tint"></span> {{_('Humidity sensor')}} <span class="title">{{_('new')}}</span> <small>...</small> <span class="badge bg-red" title="{{_('warning')}}">{{_('warning')}}</span> <span class="badge bg-orange" title="{{_('error')}}">{{_('error')}}</span> <span class="badge bg-blue" title="{{_('Excluded from average calculation')}}">{{_('excl. avg')}}</span></h2>
+                <h2 class="moisture"><span aria-hidden="true" class="glyphicon glyphicon-tint"></span> {{_('Moisture sensor')}} <span class="title">{{_('new')}}</span> <small>...</small> <span class="badge bg-red" title="{{_('warning')}}">{{_('warning')}}</span> <span class="badge bg-orange" title="{{_('error')}}">{{_('error')}}</span> <span class="badge bg-blue" title="{{_('Excluded from average calculation')}}">{{_('excl. avg')}}</span></h2>
+                <h2 class="conductivity"><span aria-hidden="true" class="glyphicon glyphicon-oil"></span> {{_('Conductivity sensor')}} <span class="title">{{_('new')}}</span> <small>...</small> <span class="badge bg-red" title="{{_('warning')}}">{{_('warning')}}</span> <span class="badge bg-orange" title="{{_('error')}}">{{_('error')}}</span> <span class="badge bg-blue" title="{{_('Excluded from average calculation')}}">{{_('excl. avg')}}</span></h2>
+                <h2 class="distance"><span aria-hidden="true" class="glyphicon glyphicon-signal"></span> {{_('Distance sensor')}} <span class="title">{{_('new')}}</span> <small>...</small> <span class="badge bg-red" title="{{_('warning')}}">{{_('warning')}}</span> <span class="badge bg-orange" title="{{_('error')}}">{{_('error')}}</span> <span class="badge bg-blue" title="{{_('Excluded from average calculation')}}">{{_('excl. avg')}}</span></h2>
+                <h2 class="ph"><span aria-hidden="true" class="glyphicon glyphicon-scale"></span> {{_('pH sensor')}} <span class="title">{{_('new')}}</span> <small>...</small> <span class="badge bg-red" title="{{_('warning')}}">{{_('warning')}}</span> <span class="badge bg-orange" title="{{_('error')}}">{{_('error')}}</span> <span class="badge bg-blue" title="{{_('Excluded from average calculation')}}">{{_('excl. avg')}}</span></h2>
+                <h2 class="light uva uvb uvi"><span aria-hidden="true" class="glyphicon glyphicon-adjust"></span> {{_('Light sensor')}} <span class="title">{{_('new')}}</span> <small>...</small> <span class="badge bg-red" title="{{_('warning')}}">{{_('warning')}}</span> <span class="badge bg-orange" title="{{_('error')}}">{{_('error')}}</span> <span class="badge bg-blue" title="{{_('Excluded from average calculation')}}">{{_('excl. avg')}}</span></h2>
+                <h2 class="fertility"><span aria-hidden="true" class="glyphicon glyphicon-grain"></span> {{_('Fertility sensor')}} <span class="title">{{_('new')}}</span> <small>...</small> <span class="badge bg-red" title="{{_('warning')}}">{{_('warning')}}</span> <span class="badge bg-orange" title="{{_('error')}}">{{_('error')}}</span> <span class="badge bg-blue" title="{{_('Excluded from average calculation')}}">{{_('excl. avg')}}</span></h2>
+                <h2 class="co2"><span aria-hidden="true" class="glyphicon glyphicon-tree-conifer"></span> {{_('CO2 sensor')}} <span class="title">{{_('new')}}</span> <small>...</small> <span class="badge bg-red" title="{{_('warning')}}">{{_('warning')}}</span> <span class="badge bg-orange" title="{{_('error')}}">{{_('error')}}</span> <span class="badge bg-blue" title="{{_('Excluded from average calculation')}}">{{_('excl. avg')}}</span></h2>
+                <h2 class="volume"><span aria-hidden="true" class="glyphicon glyphicon-signal"></span> {{_('Volume sensor')}} <span class="title">{{_('new')}}</span> <small>...</small> <span class="badge bg-red" title="{{_('warning')}}">{{_('warning')}}</span> <span class="badge bg-orange" title="{{_('error')}}">{{_('error')}}</span> <span class="badge bg-blue" title="{{_('Excluded from average calculation')}}">{{_('excl. avg')}}</span></h2>
                 <ul class="nav navbar-right panel_toolbox">
                   <li>
                     <a class="collapse-link"><i class="fa fa-chevron-up"></i></a>
@@ -74,15 +77,18 @@
             source_row = $('div.row.sensor').html();
             $('div.row.sensor').remove();
 
-            $.get('/api/sensors/{{sensor_type}}',function(json_data) {
-              $('div.row.jumbotron').toggle(json_data.sensors.length == 0);
-              $.each(json_data.sensors,function(index,sensor_data){
-                add_sensor_status_row(sensor_data);
-                update_sensor(sensor_data);
-                sensor_gauge('sensor_' + sensor_data.id, sensor_data);
-                load_history_graph('sensor_' + sensor_data.id,'{{sensor_type}}','/api/history/sensors/' + sensor_data.id);
+            var sensor_types = '{{sensor_type}}'.split(',');
+            $.each(sensor_types,function(counter,sensor_type){
+              $.get('/api/sensors/' + sensor_type,function(json_data) {
+                $.each(sortByKey(json_data.sensors,'name'),function(index,sensor_data){
+                  add_sensor_status_row(sensor_data);
+                  update_sensor(sensor_data);
+                  sensor_gauge('sensor_' + sensor_data.id, sensor_data);
+                  load_history_graph('sensor_' + sensor_data.id,sensor_type + (sensor_type == 'light' && sensor_data.firmware === undefined ? '_percentage' : '') ,'/api/history/sensors/' + sensor_data.id);
+                });
+                $('div.row.jumbotron').toggle($('div.row.sensor:visible').length == 0);
+                reload_reload_theme();
               });
-              reload_reload_theme();
             });
           });
         </script>

@@ -19,8 +19,9 @@
                 <strong>{{_('Location')}}</strong>: {{!translations.get_translation('webcam_field_location')}}
                 <ul>
                   <li><strong>{{_('RPICam')}}:</strong> rpicam</li>
+                  <li><strong>{{_('RPICam')}}:</strong> rpicam_live</li>
                   <li><strong>{{_('V4L')}}:</strong> /dev/videoX</li>
-                  <li><strong>{{_('Remote source')}}:</strong> http://source.web.cam/stream</li>
+                  <li><strong>{{_('Remote source')}}:</strong> http://source.web.cam/stream.jpg</li>
                 </ul>
               </li>
               <li>
@@ -89,16 +90,18 @@
                           <label for="webcam_[nr]_name">{{_('Name')}}</label>
                           <input class="form-control" name="webcam_[nr]_name" placeholder="{{_('Name')}}" required="required" type="text" data-toggle="tooltip" data-placement="bottom" title="" data-original-title="{{translations.get_translation('webcam_field_name')}}">
                         </div>
-                        <div class="col-md-8 col-sm-8 col-xs-12">
+                        <div class="col-md-4 col-sm-4 col-xs-12 form-group">
                           <label for="webcam_[nr]_resolution">{{_('Resolution')}}</label>
+                          <div class="form-group">
+                            <div class="col-md-6 col-sm-6 col-xs-12" style="padding-left: 0px;padding-right: 0px">
+                              <input class="form-control" name="webcam_[nr]_resolution_width" placeholder="{{_('Width')}}" required="required" type="text" data-toggle="tooltip" data-placement="bottom" title="" pattern="[0-9]+" data-original-title="{{translations.get_translation('webcam_field_resolution_width')}}">
+                            </div>
+                            <div class="col-md-6 col-sm-6 col-xs-12" style="padding-left: 0px;padding-right: 0px">
+                              <input class="form-control" name="webcam_[nr]_resolution_height" placeholder="{{_('Height')}}" required="required" type="text" data-toggle="tooltip" data-placement="bottom" title="" pattern="[0-9]+"  data-original-title="{{translations.get_translation('webcam_field_resolution_height')}}">
+                            </div>
+                          </div>
                         </div>
-                        <div class="col-md-4 col-sm-4 col-xs-6 form-group">
-                          <input class="form-control " name="webcam_[nr]_resolution_width" placeholder="{{_('Width')}}" required="required" type="text" data-toggle="tooltip" data-placement="bottom" title="" pattern="[0-9]+" data-original-title="{{translations.get_translation('webcam_field_resolution_width')}}">
-                        </div>
-                        <div class="col-md-4 col-sm-4 col-xs-6 form-group">
-                          <input class="form-control" name="webcam_[nr]_resolution_height" placeholder="{{_('Height')}}" required="required" type="text" data-toggle="tooltip" data-placement="bottom" title="" pattern="[0-9]+"  data-original-title="{{translations.get_translation('webcam_field_resolution_height')}}">
-                        </div>
-                        <div class="col-md-4 col-sm-4 col-xs-6 form-group">
+                        <div class="col-md-4 col-sm-4 col-xs-12 form-group">
                           <label for="webcam_[nr]_rotation">{{_('Picture rotation')}}</label>
                           <div class="form-group" data-toggle="tooltip" data-placement="top" title="" data-original-title="{{translations.get_translation('webcam_field_rotation')}}">
                             <select class="form-control" name="webcam_[nr]_rotation" tabindex="-1" placeholder="{{_('Select an option')}}">
@@ -112,7 +115,7 @@
                             </select>
                           </div>
                         </div>
-                        <div class="col-md-4 col-sm-4 col-xs-6 form-group">
+                        <div class="col-md-2 col-sm-2 col-xs-6 form-group">
                           <label for="webcam_[nr]_archive">{{_('Archive')}}</label>
                           <div class="form-group" data-toggle="tooltip" data-placement="top" title="" data-original-title="{{translations.get_translation('webcam_field_archive')}}">
                             <select class="form-control" name="webcam_[nr]_archive" tabindex="-1" placeholder="{{_('Select an option')}}">
@@ -128,6 +131,28 @@
                               <option value="21600">{{_('6 hours')}}</option>
                               <option value="43200">{{_('12 hours')}}</option>
                               <option value="86400">{{_('1 day')}}</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div class="col-md-3 col-sm-3 col-xs-6 form-group">
+                          <label for="webcam_[nr]_archivelight">{{_('Archive light state')}}</label>
+                          <div class="form-group" data-toggle="tooltip" data-placement="top" title="" data-original-title="{{translations.get_translation('webcam_field_archive_light')}}">
+                            <select class="form-control" name="webcam_[nr]_archivelight" tabindex="-1" placeholder="{{_('Select an option')}}">
+                              <option value="">{{_('Select an option')}}</option>
+                              <option value="ignore">{{_('Ignore')}}</option>
+                              <option value="on">{{_('When on')}}</option>
+                              <option value="off">{{_('When off')}}</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div class="col-md-3 col-sm-3 col-xs-6 form-group">
+                          <label for="webcam_[nr]_archivedoor">{{_('Archive door state')}}</label>
+                          <div class="form-group" data-toggle="tooltip" data-placement="top" title="" data-original-title="{{translations.get_translation('webcam_field_archive_door')}}">
+                            <select class="form-control" name="webcam_[nr]_archivedoor" tabindex="-1" placeholder="{{_('Select an option')}}">
+                              <option value="">{{_('Select an option')}}</option>
+                              <option value="ignore">{{_('Ignore')}}</option>
+                              <option value="open">{{_('When open')}}</option>
+                              <option value="closed">{{_('When closed')}}</option>
                             </select>
                           </div>
                         </div>
@@ -155,7 +180,7 @@
             });
 
             $.get($('form').attr('action'),function(json_data){
-              $.each(json_data.webcams, function(index,webcam_data) {
+              $.each(sortByKey(json_data.webcams,'name'), function(index,webcam_data) {
                 add_webcam_setting_row(webcam_data);
                 update_webcam(webcam_data);
               });
