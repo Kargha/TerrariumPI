@@ -5,7 +5,7 @@
   <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
   <meta content="IE=edge" http-equiv="X-UA-Compatible">
   <meta content="width=device-width, initial-scale=1" name="viewport">
-  <title>{{title}} | {{page_title}}</title>
+  <title>{{page_title}} | {{title}} ({{version}})</title>
   <link href="{{person_image}}" rel="icon" type="image/x-icon">
   <link rel="apple-touch-icon" sizes="57x57" href="{{person_image}}" />
   <link rel="apple-touch-icon" sizes="72x72" href="{{person_image}}" />
@@ -29,6 +29,7 @@
   <link href="/static/leaflet/leaflet.css" rel="stylesheet">
   <link href="/static/Leaflet.loading/src/Control.Loading.css" rel="stylesheet">
   <link href="/static/Leaflet.fullscreen/dist/leaflet.fullscreen.css" rel="stylesheet">
+  <link href="/static/leaflet-icon-pulse/dist/L.Icon.Pulse.css" rel="stylesheet">
   <!-- Fancybox -->
   <link href="/static/fancybox/dist/jquery.fancybox.min.css" rel="stylesheet">
   <!-- Dropzone.js -->
@@ -40,6 +41,8 @@
   <link href="/gentelella/vendors/switchery/dist/switchery.min.css" rel="stylesheet">
   <!-- bootstrap-daterangepicker -->
   <link href="/gentelella/vendors/bootstrap-daterangepicker/daterangepicker.css" rel="stylesheet">
+  <!-- FullCalendar -->
+  <link href="/gentelella/vendors/fullcalendar/dist/fullcalendar.min.css" rel="stylesheet">
   <!-- Custom Theme Style -->
   <link href="/gentelella/build/css/custom.min.css" rel="stylesheet">
   <!-- TerrariumPI Style -->

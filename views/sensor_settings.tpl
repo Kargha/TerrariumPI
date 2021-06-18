@@ -107,6 +107,7 @@
                                 <option value="am2302">{{_('AM2302')}}</option>
                                 <option value="sht2x">{{_('SHT2X')}}</option>
                                 <option value="sht3x">{{_('SHT3X')}}</option>
+                                <option value="sht3xd">{{_('SHT3XD')}}</option>
                                 <option value="htu21d">{{_('HTU21D')}}</option>
                                 <option value="si7021">{{_('SI7021')}}</option>
                                 <option value="bme280">{{_('BME280 / BMP280')}}</option>
@@ -114,12 +115,20 @@
                                 <option value="w1">{{_('1Wire')}}</option>
                                 <option value="ytxx-digital">{{_('YTXX-digital')}}</option>
                                 <option value="remote">{{_('Remote')}}</option>
+                                <option value="script">{{_('Custom script')}}</option>
                                 <option value="hc-sr04">{{_('HC-SR04')}}</option>
                                 <option value="sku-sen0161">{{_('pH SKU-SEN0161')}}</option>
                                 <option value="veml6075">{{_('VEML6075')}}</option>
                                 <option value="miflora">{{_('MiFlora')}}</option>
+                                <option value="mitemp">{{_('Mi Temperature & Humidity')}}</option>
                                 <option value="mh-z19">{{_('mh-z19')}}</option>
+                                <option value="k30co2">{{_('K30 CO2')}}</option>
+                                <option value="cozirco2">{{_('COZIR CO2')}}</option>
                                 <option value="mlx90614">{{_('MLX90614')}}</option>
+                                <option value="am2320">{{_('AM2320')}}</option>
+                                <option value="amg8833">{{_('AMG8833')}}</option>
+                                <option value="css811">{{_('CSS811')}}</option>
+                                <option value="humidicon">{{_('HumidIcon')}}</option>
                               </select>
                             </div>
                           </div>
@@ -189,7 +198,7 @@
                           </div>
                           <div class="col-md-4 col-sm-4 col-xs-4 form-group">
                             <label for="sensor_[nr]_temperature_offset">{{_('Temperature offset')}}</label>
-                            <input class="form-control" name="sensor_[nr]_temp_offset" placeholder="{{_('Temperature offset')}}" required="required" type="text" pattern="[0-9\.]+" data-toggle="tooltip" data-placement="bottom" title="" data-original-title="{{translations.get_translation('sensor_field_temperature_offset')}}">
+                            <input class="form-control" name="sensor_[nr]_temp_offset" placeholder="{{_('Temperature offset')}}" required="required" type="text" pattern="[0-9\.\-]+" data-toggle="tooltip" data-placement="bottom" title="" data-original-title="{{translations.get_translation('sensor_field_temperature_offset')}}">
                           </div>
                         </div>
                       </div>

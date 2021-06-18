@@ -6,7 +6,6 @@ var globals = {
   temperature_indicator: 'C',
   distance_indicator: 'cm',
   gauges: [],
-  webcams: [],
   graphs: {},
   graph_cache: 1 * 60,
   websocket_timer: null,
@@ -15,6 +14,7 @@ var globals = {
   language: null,
   ajaxloader: 0,
   horizontal_legend: 0,
+  reboot: false,
 };
 // Single variable that is used for loading the status and settings rows for: sensors, power switches, door indicators etc
 var source_row = null;
@@ -340,9 +340,29 @@ function formatCurrency(amount,minfrac,maxfrac) {
   minfrac = minfrac || 2;
   maxfrac = maxfrac || 2;
 
+  var display = 'EUR';
+  switch (globals.language) {
+    case 'ca':
+      display = 'CAD';
+      break;
+
+    case 'en_GB':
+      display = 'GBP';
+      break;
+
+   case 'en_US':
+     display = 'USD';
+     break
+
+   case 'nb_NO':
+    display = 'NOK'
+    break;
+
+  }
+
   return (1 * amount).toLocaleString(globals.language.replace('_','-'), {
     style: 'currency',
-    currency: 'EUR',
+    currency: display,
     minimumFractionDigits: minfrac,
     maximumFractionDigits: maxfrac
   });
@@ -402,6 +422,11 @@ function websocket_init(reconnect) {
   };
 
   globals.websocket.onmessage = function(evt) {
+    if (globals.reboot) {
+      // When a reboot is triggered, the first connection message is also a trigger that the reboot has finished. So reload the page!
+      location.reload();
+    }
+
     online_updater();
     var data = JSON.parse(evt.data);
     switch (data.type) {
@@ -410,6 +435,7 @@ function websocket_init(reconnect) {
         break;
       case 'uptime':
         update_dashboard_uptime(data.data);
+        load_calendar_history();
         break;
       case 'power_usage_water_flow':
         update_dashboard_power_usage(data.data.power);
@@ -509,8 +535,9 @@ function info_notification_bubble(title,message) {
 /* General functions - End notification bubbles */
 
 /* General functions - Notification messages */
-function add_notification_message(type, title, message, icon, color, date) {
+function add_notification_message(type, title, message, icon, color, date, link) {
   var notification_date = date || new Date().getTime();
+  link = link || false;
   var menu = $('ul#' + type);
   if (menu.find('li:first a span.message').text() == message) {
     // Skip duplicate messages
@@ -520,15 +547,19 @@ function add_notification_message(type, title, message, icon, color, date) {
   var notification = $('<a>');
   if (type != 'player_messages') {
     notification.on('click', function() {
-      close_notification_message(this);
+      if (link !== false) {
+        load_page(link);
+      } else {
+        close_notification_message(this);
+      }
     });
   }
 
   notification.append($('<span>').addClass('image').append($('<img>').attr({
-    'src': $('div.profile_pic img').attr('src')
+    'src': $('div.profile_pic img:last').attr('src')
   })));
-  notification.append($('<span>').append($('<span>').text(title)).append($('<span>').addClass('time notification_timestamp').attr('data-timestamp',notification_date).text('...')));
-  notification.append($('<span>').addClass('message').text(message).append($('<span>').addClass('pull-right').html('<i class="fa ' + icon + ' ' + color + '"></i>')));
+  notification.append($('<span>').append($('<span>').html(title)).append($('<span>').addClass('time notification_timestamp').attr('data-timestamp',notification_date)) );
+  notification.append($('<span>').addClass('message').html(message).append($('<span>').addClass('pull-right').html('<i class="fa ' + icon + ' ' + color + '"></i>')));
 
   // Remove no messages line
   menu.find('li.no_message').hide();
@@ -545,12 +576,12 @@ function close_notification_message(notification) {
   notification = $(notification).parent();
   var list = notification.parent('ul');
   notification.remove();
-  menu.find('li.no_message').toggle(list.find('li.notification').length === 0);
+  list.find('li.no_message').toggle(list.find('li.notification:not(.no_message)').length === 0);
 }
 
 function notification_timestamps() {
   var now = (new Date()).getTime();
-  $('span.notification_timestamp').each(function() {
+  $('span.notification_timestamp,strong.notification_timestamp').each(function() {
     var timestamp = $(this).attr('data-timestamp') * 1;
     var duration = moment.duration((now - timestamp) * -1);
     $(this).text(duration.humanize(true));
@@ -684,11 +715,12 @@ function process_form() {
 function prepare_form_data(form) {
   var formdata = [];
   var form_type = form.attr('action').split('/').pop();
-  var re = /(sensor|switch|webcam|light|humidity|temperature|watertank|moisture|conductivity|ph|co2|fertility|door|profile|playlist)(_\d+)?_(.*)/i;
+
+  var re = /(calendar|sensor|switch|webcam|light|humidity|temperature|watertank|moisture|conductivity|ph|co2|fertility|door|profile|playlist)(_\d+)?_(.*)/i;
   var matches = null;
   var objectdata = {};
   var prev_nr = -1;
-  if (form_type === 'weather' || form_type === 'environment' || form_type === 'system' || form_type === 'profile' || form_type === 'notifications') {
+  if (form_type === 'weather' || form_type === 'environment' || form_type === 'system' || form_type === 'profile' || form_type === 'notifications' || form_type === 'hardware' || form_type === 'calendar') {
     formdata = {};
   }
   try {
@@ -701,11 +733,13 @@ function prepare_form_data(form) {
           case 'weather':
           case 'system':
           case 'notifications':
-            if (field_name == 'age') {
+          case 'calendar':
+            if (['age','calendar_date','daterangepicker_start','daterangepicker_end'].indexOf(field_name) !== -1) {
               field_value = moment(field_value,'L').unix();
             }
             formdata[field_name] = field_value;
             break;
+          case 'hardware':
           case 'sensors':
           case 'switches':
           case 'powerswitches':
@@ -749,7 +783,7 @@ function prepare_form_data(form) {
       }
     });
     if (Object.keys(objectdata).length > 1) {
-      if (form_type === 'weather' || form_type === 'environment' || form_type === 'system' || form_type === 'notifications') {
+      if (form_type === 'weather' || form_type === 'environment' || form_type === 'system' || form_type === 'notifications' || form_type === 'hardware' || form_type === 'calendar') {
         formdata[prev_nr] = $.extend(true, {}, objectdata);
       } else {
         formdata.push($.extend(true, {}, objectdata));
@@ -914,7 +948,7 @@ function sensor_gauge(name, data) {
 
   if ($('#' + name + ' .gauge').length == 1) {
     // Update timestamp indicator
-    $('#' + name + ' small').text(moment().format('LLL'));
+    $('#' + name + ' span.small:visible:last').text(moment().format('LLL'));
     // Setup a new gauge if needed
     if ($('#' + name + ' .gauge').attr('done') === undefined) {
       var total_area = data.limit_max - data.limit_min;
@@ -972,6 +1006,39 @@ function sensor_gauge(name, data) {
   }
 }
 
+/**
+* returns an array with moving average of the input array
+* @param array - the input array
+* @param count - the number of elements to include in the moving average calculation
+* @param qualifier - an optional function that will be called on each
+*  value to determine whether it should be used
+*/
+function movingAvg(array, count, qualifier){
+
+    // calculate average for subarray
+    var avg = function(array, qualifier){
+
+        var sum = 0, count = 0, val;
+        for (var i in array){
+            val = array[i][1];
+            if (!qualifier || qualifier(val)){
+                sum += val;
+                count++;
+            }
+        }
+
+        return [array[0][0],sum / count];
+    };
+    var result = [], val;
+
+    // calculate average for each subarray and add to result
+    for (var i=0, len=array.length - count; i <= len; i++){
+        val = avg(array.slice(i, i + count), qualifier);
+        result.push(val);
+    }
+    return result;
+}
+
 function load_history_graph(id,type,data_url,nocache) {
   if ($('#' + id + ' .history_graph').length === 1) {
     var now = + new Date();
@@ -992,16 +1059,20 @@ function load_history_graph(id,type,data_url,nocache) {
     if ($('#' + id + ' .history_graph.loading').length === 1) {
     // Create period menu items
       var menu_items = $('#' + id + ' ul.dropdown-menu.period a');
-      $.each(['day','week','month','year'],function(index,value){
-        if (index === 0) {
-          $(menu_items[index]).parent().addClass('focus');
+      $.each(['day','week','month','year','lr'],function(index,value){
+        if (index < menu_items.length){
+          if (index === 0) {
+            $(menu_items[index]).parent().addClass('focus');
+          }
+
+          $(menu_items[index]).attr('title',$(menu_items[index]).text());
+          $(menu_items[index]).off('click');
+          $(menu_items[index]).on('click', function(){
+            $(this).parent().siblings().removeClass('focus');
+            $(this).parent().addClass('focus');
+            load_history_graph(id,type,data_url + '/' + value ,1);
+          });
         }
-        $(menu_items[index]).off('click');
-        $(menu_items[index]).on('click', function(){
-          $(this).parent().siblings().removeClass('focus');
-          $(this).parent().addClass('focus');
-          load_history_graph(id,type,data_url + '/' + value ,1);
-        });
       });
       $('#' + id + ' ul.dropdown-menu a.export').off('click').on('click',function(){
         var download = $('iframe#history_export');
@@ -1079,11 +1150,21 @@ function load_history_graph(id,type,data_url,nocache) {
 }
 
 function history_graph(name, data, type) {
+  function getMin(ret, thisVal) {
+    thisVal = thisVal[1] || ret;
+    return ret < thisVal ? ret : thisVal;
+  }
+
+  function getMax(ret, thisVal) {
+    thisVal = thisVal[1] || ret;
+    return ret > thisVal ? ret : thisVal;
+  }
+
   if (type === undefined) {
     type = 'temperature';
   }
 
-  var graph_ticks = 8;
+  var graph_ticks = 8, smooth = false;
   if (type === 'door') {
     graph_ticks = [[0, '{{_('Closed')}}'], [1, '{{_('Open')}}']];
   }
@@ -1217,6 +1298,7 @@ function history_graph(name, data, type) {
 
   switch (type) {
     case 'light':
+      smooth = true;
       if (data.light_average !== undefined && data.light_average) {
 
         graph_data = [{
@@ -1280,6 +1362,7 @@ function history_graph(name, data, type) {
     case 'fertility':
     case 'co2':
     case 'volume':
+      smooth = true;
       graph_data = [{
         label: '{{_('Current')}}',
         data: data.current
@@ -1295,6 +1378,7 @@ function history_graph(name, data, type) {
     case 'weather':
       graph_options.series.curvedLines.apply = true;
     case 'system_temperature':
+      smooth = true;
       graph_data = [{
         label: '{{_('Temperature')}}',
         data: data
@@ -1317,6 +1401,7 @@ function history_graph(name, data, type) {
       break;
 
     case 'system_load':
+      smooth = true;
       graph_data = [{
         label: '{{_('Load')}}',
         data: data.load1
@@ -1410,6 +1495,27 @@ function history_graph(name, data, type) {
     graph_options.xaxis.tickSize[0] = Math.round(total_data_duration * 2.5);
   }
 
+  if (smooth && globals.graph_smooth_value > 0) {
+    graph_data[0].data = movingAvg(graph_data[0].data.reverse(),globals.graph_smooth_value);
+    try {
+      graph_data[1].data = graph_data[1].data.splice(globals.graph_smooth_value);
+    } catch (e) {}
+    try {
+      graph_data[2].data = graph_data[2].data.splice(globals.graph_smooth_value);
+    } catch (e) {}
+  }
+
+  if (globals.graph_show_min_max_gauge && name.indexOf('system_') === -1 && globals.gauges[name]) {
+    // set the min/max values in the guage
+    globals.gauges[name].options.staticLabels = {
+      labels: [graph_data[0].data.reduce(getMin), graph_data[0].data.reduce(getMax)],
+      font: '10px Helvetica Neue,sans-serif',
+      color: '#73879C',
+      fractionDigits: 3
+    };
+    globals.gauges[name].render();
+  }
+
   if ($('#' + name + ' .history_graph').length == 1) {
     $('#' + name + ' .history_graph').html('').removeClass('loading');
     $.plot($('#' + name + ' .history_graph'), graph_data, graph_options);
@@ -1419,7 +1525,7 @@ function history_graph(name, data, type) {
       var usage = '';
       if (data.totals !== undefined) {
         if (data.totals.duration > 0) {
-          usage = '{{_('Duration')}}: ' + moment.duration(data.totals.duration * 1000).humanize()
+          usage = '{{_('Duration in hours')}}: ' + Math.round(moment.duration(data.totals.duration * 1000).as('hours')*100)/100;
         }
         if (data.totals.power_wattage > 0) {
           usage += (usage != '' ? ' - ' : '') + '{{_('Total power in kWh')}}: ' + formatNumber(data.totals.power_wattage / (3600 * 1000));
@@ -1554,20 +1660,20 @@ function init_sidebar() {
     }
 
     $BODY.toggleClass('nav-md nav-sm');
+    Cookies.set('hide_menu',$BODY.hasClass('nav-sm'));
 
     setContentHeight();
 
     $('.dataTable').each ( function () { $(this).dataTable().fnDraw(); });
   });
 
-	// check active menu
-	$SIDEBAR_MENU.find('a[href="' + CURRENT_URL + '"]').parent('li').addClass('current-page');
+  $SIDEBAR_MENU.find('a[href="' + CURRENT_URL + '"]').parent('li').addClass('current-page');
 
-	$SIDEBAR_MENU.find('a').filter(function () {
-		return this.href == CURRENT_URL;
-	}).parent('li').addClass('current-page').parents('ul').slideDown(function() {
-		setContentHeight();
-	}).parent().addClass('active');
+  $SIDEBAR_MENU.find('a').filter(function () {
+    return this.href == CURRENT_URL;
+  }).parent('li').addClass('current-page').parents('ul').slideDown(function() {
+    setContentHeight();
+  }).parent().addClass('active');
 
 	// recompute content when resizing
 	$(window).smartresize(function(){
@@ -1584,6 +1690,15 @@ function init_sidebar() {
 			mouseWheel:{ preventDefault: true }
 		});
 	}
+
+  // Hide menu bar based on cookie value
+  if ($BODY.hasClass('nav-md') && 'true' == Cookies.get('hide_menu')) {
+    $('ul.nav.side-menu li:first a:first').trigger('click');
+    $MENU_TOGGLE.trigger('click');
+  } else {
+    $('ul.nav.side-menu li:first a:first').trigger('click');
+  }
+
 };
 // /Sidebar
 
@@ -1858,7 +1973,7 @@ function update_sensor(data) {
   // Update title
   content_row.find('h2 span.title').text(data.name);
   if ('miflora' == data.hardwaretype) {
-    content_row.find('h2 span.title').append(' <span class="small">' + data.firmware + ' <i class="fa fa-plug"></i>' + data.battery + '%</span>')
+    content_row.find('h2 span.title').append(' <span class="small">' + data.firmware + ' <i class="fa fa-plug"></i>' + data.battery + '%</span>');
   }
 
   // Set the values only when empty
@@ -1890,12 +2005,12 @@ function update_sensor(data) {
   }
 }
 
-function add_sensor_setting_row(data) {
+function add_sensor_setting_row(data,is_new) {
   if (source_row === null || source_row === '') {
     return false;
   }
   // Create new row
-  var setting_row = $('<div>').addClass('row sensor').html(source_row.replace(/\[nr\]/g, $('form div.row.sensor').length));
+  var setting_row = $('<div>').addClass('row sensor' + (is_new ? ' new' : '')).html(source_row.replace(/\[nr\]/g, $('form div.row.sensor').length));
   if (data.id !== undefined) {
     // Set ID
     setting_row.attr('id','sensor_' + data.id);
@@ -1918,16 +2033,12 @@ function add_sensor_setting_row(data) {
 
       var address_field = $("input[name='" + this.name.replace('hardwaretype','address') + "']");
       address_field.attr("readonly", this.value == 'owfs' || this.value == 'w1').off('change');
-
-/*
-      if ('remote' === this.value) {
-        address_field.on('change',function(){
-            parse_remote_data('sensor',this.value);
-        });
-      }
-      */
     }
   });
+
+  // Disable hardware select box
+  setting_row.find('select[name*="hardwaretype"]').attr("disabled", !is_new);
+
   // Add on the bottom before the submit row
   setting_row.insertBefore('div.row.submit');
 }
@@ -1948,7 +2059,8 @@ function add_sensor() {
   data['id'] = Math.floor(Date.now() / 1000);
 
   // Add new row
-  add_sensor_setting_row(data);
+  add_sensor_setting_row(data,true);
+
   // Update new row with new values
   update_sensor(data);
 
@@ -1977,6 +2089,7 @@ function toggle_power_manual_mode(id) {
 }
 
 function add_power_switch_status_row(data) {
+  console.log(data);
   if (source_row === null || source_row === '') {
     return false;
   }
@@ -1987,7 +2100,7 @@ function add_power_switch_status_row(data) {
   new_row.attr('id','powerswitch_' + data.id);
 
   // Change the toggle icon with a slider knob
-  if ('pwm-dimmer' === data.hardwaretype || 'remote-dimmer' === data.hardwaretype || 'dc-dimmer' === data.hardwaretype) {
+  if (data.hardwaretype.indexOf('-dimmer') !== -1 || 'brightpi' === data.hardwaretype || 'pca9685' == data.hardwaretype) {
     new_row.find('div.x_content div.power_switch')
       .removeClass('big')
       .addClass('dimmer')
@@ -2031,7 +2144,8 @@ function update_power_switch(data) {
   var on = data.state;
   // Set the name and status
   var current_status_data = '';
-  if (data.hardwaretype.indexOf('dimmer') > 0) {
+  var dimmer = data.hardwaretype.indexOf('dimmer') !== -1 || 'brightpi' === data.hardwaretype || 'pca9685' === data.hardwaretype;
+  if (dimmer) {
     current_status_data = formatNumber(data.current_power_wattage) + 'W / ';
     on = data.state > data.dimmer_off_percentage;
   }
@@ -2041,7 +2155,7 @@ function update_power_switch(data) {
   }
   content_row.find('span.glyphicon').removeClass('blue green').addClass((on ? 'green' : 'blue'));
   content_row.find('h2 span.title').text(data.name);
-  content_row.find('h2 small.current_usage').text(current_status_data);
+  content_row.find('h2 span.current_usage').text(current_status_data);
   content_row.find('h2 span.manual_mode').toggle(data.manual_mode);
   //switch_row.find('.knob').val(power_switch.state).trigger('change');
 
@@ -2069,7 +2183,7 @@ function update_power_switch(data) {
   });
 
   // Open or hide the dimmer values (will not trigger on the select field)
-  if ('pwm-dimmer' === data.hardwaretype || 'remote-dimmer' === data.hardwaretype || 'dc-dimmer' === data.hardwaretype) {
+  if (dimmer) {
     content_row.find('.row.dimmer').show();
   } else {
     // Remove dimmer row, else form submit is 'stuck' on hidden fields that have invalid patterns... :(
@@ -2077,22 +2191,15 @@ function update_power_switch(data) {
   }
 }
 
-function add_power_switch_setting_row(data) {
+function add_power_switch_setting_row(data,is_new) {
   if (source_row === null || source_row === '') {
     return false;
   }
   // Create new row
-  var setting_row = $('<div>').addClass('row switch').html(source_row.replace(/\[nr\]/g, $('form div.row.switch').length));
+  var setting_row = $('<div>').addClass('row switch' + (is_new ? ' new' : '')).html(source_row.replace(/\[nr\]/g, $('form div.row.switch').length));
   if (data.id !== undefined) {
     // Set ID
     setting_row.attr('id','powerswitch_' + data.id);
-
-    // Set toggle (disabled in 'edit' modus)
-    /*
-    power_switch_row.find('div.power_switch span.glyphicon').on('click',function(){
-      toggle_power_switch($(this).parentsUntil('div.row.switch').parent().attr('id').split('_')[1]);
-    });
-    */
   }
   // Re-initialize the select pulldowns
   //setting_row.find('span.select2.select2-container').remove();
@@ -2110,6 +2217,9 @@ function add_power_switch_setting_row(data) {
         }
       }
   });
+  // Disable hardware select box
+  setting_row.find('select[name*="hardwaretype"]').attr("disabled", !is_new);
+
   // Add on the bottom before the submit row
   setting_row.insertBefore('div.row.submit');
 }
@@ -2130,7 +2240,7 @@ function add_power_switch() {
   data['id'] = Math.floor(Date.now() / 1000);
 
   // Add new row
-  add_power_switch_setting_row(data);
+  add_power_switch_setting_row(data,true);
   // Update new row with new values
   update_power_switch(data);
 
@@ -2242,12 +2352,12 @@ function update_door(data) {
   });
 }
 
-function add_door_setting_row(data) {
+function add_door_setting_row(data,is_new) {
   if (source_row === null || source_row === '') {
     return false;
   }
   // Create new row
-  var setting_row = $('<div>').addClass('row door').html(source_row.replace(/\[nr\]/g, $('form div.row.door').length));
+  var setting_row = $('<div>').addClass('row door' + (is_new ? ' new' : '')).html(source_row.replace(/\[nr\]/g, $('form div.row.door').length));
   if (data.id !== undefined) {
     // Set ID
     setting_row.attr('id','door_' + data.id);
@@ -2259,6 +2369,9 @@ function add_door_setting_row(data) {
     allowClear: false,
     minimumResultsForSearch: Infinity
   });
+  // Disable hardware select box
+  setting_row.find('select[name*="hardwaretype"]').attr("disabled", !is_new);
+
   // Add on the bottom before the submit row
   setting_row.insertBefore('div.row.submit');
 }
@@ -2279,7 +2392,7 @@ function add_door() {
   data['id'] = Math.floor(Date.now() / 1000);
 
   // Add new row
-  add_door_setting_row(data);
+  add_door_setting_row(data,true);
   // Update new row with new values
   update_door(data);
 
@@ -2294,17 +2407,56 @@ function add_door() {
 /* End Doors code */
 
 /* Webcam code */
-function createWebcamLayer(webcamid, maxzoom) {
-  return L.tileLayer('/webcam/{id}/{id}_tile_{z}_{x}_{y}.jpg?_{time}', {
-    time: function() {
-      return (new Date()).valueOf();
-    },
-    id: webcamid,
-    noWrap: true,
-    continuousWorld: false,
-    maxNativeZoom: maxzoom,
-    maxZoom: maxzoom + 1
-  });
+var realtime_sensor_data = {};
+function updateWebcamLabel(marker) {
+  if (marker.options.sensors.length > 0) {
+    var message = [];
+    $.each(marker.options.sensors,function(counter,value){
+      if (message.length == 0) {
+        message.push('<strong>' + realtime_sensor_data[value].name + '</strong>');
+      }
+      message.push(realtime_sensor_data[value].type.substr(0,4) + '. ' + (Math.round((realtime_sensor_data[value].current + Number.EPSILON) * 1000) / 1000) + '' + realtime_sensor_data[value].indicator);
+    });
+    marker.setTooltipContent(message.join('<br />'));
+    $(marker._icon).addClass('reset');
+    setTimeout(function(){
+      $(marker._icon).removeClass('reset');
+    },10);
+  }
+}
+
+function createWebcamLabel(layer,x,y,sensors,edit) {
+  edit = edit === true
+  var marker_config = {
+    draggable: edit,
+    sensors: sensors.slice(0),
+    layer: layer
+  }
+
+  if (!edit) {
+    marker_config.icon = L.icon.pulse({iconSize:[10,10],color:'red'});
+  }
+
+  var marker = L.marker([x, y],marker_config).bindTooltip('<center><strong>{{_('Loading')}}...</strong></center>', {
+      permanent: true,
+      direction: y > 0 ? 'right' : 'left',
+      opacity: 0.5,
+  }).addTo(layer);
+
+  if (edit) {
+    marker.on('dragend',function(event){
+      updateWebcamMarkers(layer);
+    });
+
+    marker.on('dblclick' ,function(event) {
+      editWebcamMarker(this);
+    });
+  }
+
+  if (marker_config.sensors.length > 0) {
+    updateWebcamLabel(marker);
+  }
+  return marker;
 }
 
 function webcamArchive(webcamid) {
@@ -2317,101 +2469,193 @@ function webcamArchive(webcamid) {
   function getImages(date) {
 
     $.getJSON('api/webcams/' + webcamid + '/archive/'+ date.getFullYear() + '/' + (date.getMonth() < 9 ? '0' : '') + (date.getMonth() + 1) + '/' + (date.getDate() < 10 ? '0' : '') + date.getDate(), function(data) {
-    var photos = [];
-    var date_match = /archive_(\d+)\.jpg$/g;
+      var photos = [];
+      var date_match = /archive_(\d+)\.jpg$/g;
 
-    no_data_counter += (data.webcams[0].archive_images.length > 0 ? 0 : 1);
-    max_days_back--
+      no_data_counter += (data.webcams[0].archive_images.length > 0 ? 0 : 1);
+      max_days_back--;
 
-    if (no_data_counter > 10 || max_days_back < 0) {
-
-      console.log('Done lading:',no_data_counter,max_days_back);
-
-      return false;
-    }
-
-    $.each(data.webcams[0].archive_images, function(index,value) {
-      value.match(date_match);
-      var date_photo = date_match.exec(value);
-      if (date_photo != null && date_photo.length == 2) {
-        date_photo = moment(date_photo[1]* 1000).format('LLL');
-      } else {
-        date_photo = '{{_('Unknown date')}}';
+      if (no_data_counter > 10 || max_days_back < 0) {
+        return false;
       }
 
-      if (fancybox == null) {
-      fancybox = $.fancybox.open(
-        [{src : value,opts: { caption: '{{_('Webcam')}}' + ' ' + data.webcams[0].name + ': ' + date_photo}}],
-        {loop : false,
-         buttons : [
-                   //'slideShow',
-                   'fullScreen',
-                   'thumbs',
-                   //'share',
-                   'download',
-                   'zoom',
-                   'close'
-                ],
-         thumbs : {
-           autoStart : true
+      $.each(data.webcams[0].archive_images, function(index,value) {
+        value.match(date_match);
+        var date_photo = date_match.exec(value);
+        if (date_photo != null && date_photo.length == 2) {
+          date_photo = moment(date_photo[1]* 1000).format('LLL');
+        } else {
+          date_photo = '{{_('Unknown date')}}';
+        }
+
+        if (fancybox == null) {
+          fancybox = $.fancybox.open(
+            [{src : value,opts: { caption: '{{_('Webcam')}}' + ' ' + data.webcams[0].name + ': ' + date_photo}}],
+            {loop : false,
+             buttons : [
+                     //'slideShow',
+                     'fullScreen',
+                     'thumbs',
+                     //'share',
+                     'download',
+                     'zoom',
+                     'close']
+             }
+          );
+        } else {
+          if ($.fancybox.getInstance()) {
+            fancybox.addContent({src : value, opts: { caption: '{{_('Webcam')}}' + ' ' + data.webcams[0].name + ': ' + date_photo}});
           }
-        });
+        }
+      });
+      // recursive
+      if ($.fancybox.getInstance() || data.webcams[0].archive_images.length == 0) {
+        setTimeout(function(){
+          getImages(new Date(date.getTime() - (24 * 60 * 60 * 1000)));
+          }, ((data.webcams[0].archive_images.length + 1) * 10));
       } else {
-        fancybox.addContent({src : value, opts: { caption: '{{_('Webcam')}}' + ' ' + data.webcams[0].name + ': ' + date_photo}});
+        fancybox == null;
       }
-    });
-    // recursive
-    setTimeout(function(){
-      getImages(new Date(date.getTime() - (24 * 60 * 60 * 1000)));
-      }, 5000);
     });
   }
   getImages(now);
 }
 
+function updateWebcamMarkers(layer) {
+  var all_markers = '';
+  layer.eachLayer(function(datamarker) {
+    var pos = datamarker.getLatLng();
+    all_markers += pos.lat + ',' + pos.lng + ',' + datamarker.options.sensors.join(',') + ';';
+  });
+  $('div.row.webcam#webcam_' + layer.options.webcamid).find('input[type="hidden"][name$="_realtimedata"]').val(all_markers.slice(0,-1));
+}
+
+function addWebcamMarker(layer) {
+  editWebcamMarker(createWebcamLabel(layer,0,0,[],true));
+}
+
+function editWebcamMarker(marker) {
+  var pull_down = $('select[name="webcam_realtime_sensors_list"]');
+  pull_down[0].marker = marker;
+  pull_down.val(marker.options.sensors).trigger('change');
+
+  $('#add_sensors').off('click').on('click',function(event){
+    marker.options.sensors = pull_down.val();
+    updateWebcamMarkers(marker.options.layer);
+    updateWebcamLabel(marker);
+  });
+
+  $('#del_marker').off('click').on('click',function(event){
+    marker.options.layer.removeLayer(marker);
+    updateWebcamMarkers(marker.options.layer);
+    marker.remove();
+  });
+  $('.realtime-data-form').modal('show');
+}
+
 function initWebcam(data) {
-  if ($('div#webcam_' + data.id).length === 1) {
-    return false;
+  if (data.edit !== true) {
+    // Init the HTML
+    var webcam_row = $(source_row).attr('id','webcam_' + data.id);
+    // Set the name and status
+    webcam_row.find('h2 span.title').text(data.name);
+    // Append the page
+    $('div.row.webcam').append(webcam_row);
+    // Resize the height to get the maps working
+    webcam_row.find('div.webcam_player').height(webcam_row.width()-webcam_row.find('.x_title').height());
   }
-  // Init the HTML
-  var webcam_row = $(source_row);
-  // Set the name and status
-  webcam_row.find('h2 span.title').text(data.name);
-  // Append the page
-  $('div.row.webcam').append(webcam_row);
-  // Resize the height to get the maps working
-  webcam_row.find('div.webcam_player').attr('id','webcam_' + data.id).height(webcam_row.width()-webcam_row.find('.x_title').height());
+
+  var webcam = L.map($('#webcam_' + data.id + ' div.webcam_player' + (data.edit === true ? '_preview' : ''))[0],{
+    id: 'map_' + data.id,
+    fullscreenControl: true,
+    refresh_timer : null
+  }).on('load',function(event){
+    this.options.refresh_timer = setInterval(function(){
+      if (!webcam._container.clientHeight > 0) {
+         clearTimeout(webcam.options.refresh_timer);
+         setTimeout(function(){
+           webcam.remove();
+         },10);
+      }
+    },10 * 1000);
+  }).setView([0, 0], 1);
 
   if (data.is_live) {
-    // Load HLS player
-    var player = new Clappr.Player({source: 'webcam/' + data.id + '/stream.m3u8',
-                                    parentId: '#webcam_' + data.id,
-                                    width: '100%',
-                                    height: '100%',
-                                    autoPlay: true,
-                                    chromeless: false});
-
-    webcam_row.find('ul.nav.navbar-right.panel_toolbox li.dropdown ul.dropdown-menu' ).append('<li><a href="/webcam/' + data.id + '/' + data.id + '_raw.jpg" target="_blank">{{_('Save RAW photo')}}</a></li>')
-    webcam_row.find('ul.nav.navbar-right.panel_toolbox li.dropdown ul.dropdown-menu' ).append('<li><a href="javascript:;" onclick="webcamArchive(\'' + data.id + '\');">{{_('Archive')}}</a></li>')
+    L.videoOverlay('webcam/' + data.id + '/stream.m3u8', L.latLngBounds([[ 150, -180], [ -150, 180]]), {
+      id: 'overlay_' + data.id,
+      interactive: false,
+      autoplay: true,
+      className: 'webcam_live_' + data.id,
+    }).addTo(webcam);
   } else {
-    // Load Leaflet webcam code
-    var webcam = new L.Map('webcam_' + data.id, {
-      layers: [createWebcamLayer(data.id, data.max_zoom)],
-      fullscreenControl: true,
-    }).setView([0, 0], 1);
-
-    L.Control.ExtraWebcamControls = L.Control.extend({
-      options: {
-        position: 'topleft',
-        archive: data.archive
+    L.tileLayer('/webcam/{id}/{id}_tile_{z}_{x}_{y}.jpg?_{time}', {
+      time: function() {
+        return (new Date()).valueOf();
       },
-      initialize: function (options) {
-        // constructor
-        L.Util.setOptions(this, options);
-      },
-      onAdd: function (map) {
-        var container = L.DomUtil.create('div', 'leaflet-control-takephoto leaflet-bar leaflet-control');
+      id: data.id,
+      noWrap: true,
+      continuousWorld: false,
+      maxNativeZoom: data.max_zoom,
+      maxZoom: data.max_zoom + 1,
+      refresh_timer : null
+    }).on('remove',function(event){
+      clearTimeout(this.options.refresh_timer);
+    }).on('add',function(event){
+      var webcam_tiler = this;
+      this.options.refresh_timer = setInterval(function(){
+        webcam_tiler.redraw();
+      },30 * 1000)
+    }).addTo(webcam);
+  }
 
+  var realtime_data_layer = L.layerGroup([], {webcamid : data.id, refresh_timer: null});
+  realtime_data_layer.on('remove',function(event){
+    clearTimeout(this.options.refresh_timer);
+  });
+
+  realtime_data_layer.on('add',function(event) {
+    this.options.refresh_timer = setInterval(function(){
+      if (realtime_data_layer.getLayers().length > 0) {
+        $.get('/api/sensors',function(data) {
+          realtime_sensor_data = {};
+          $.each(data.sensors,function(counter,value){
+            realtime_sensor_data[value.id + ''] = value;
+          });
+          realtime_data_layer.eachLayer(function(marker) {
+            updateWebcamLabel(marker);
+          });
+        });
+      }
+    },30 * 1000);
+  });
+  realtime_data_layer.addTo(webcam);
+
+  if ('' !== data.realtimedata) {
+    realtime_sensor_data = {};
+    $.get('/api/sensors',function(sensor_data) {
+      $.each(sensor_data.sensors,function(counter,value){
+        realtime_sensor_data[value.id + ''] = value;
+      });
+      $.each(data.realtimedata.split(';'),function(counter,value) {
+        var tmpdata = value.split(',');
+        createWebcamLabel(realtime_data_layer,tmpdata.shift(),tmpdata.shift(),tmpdata, data.edit === true);
+      });
+    });
+  }
+
+  L.Control.ExtraWebcamControls = L.Control.extend({
+    options: {
+      position: 'topleft',
+      archive: data.archive
+    },
+    initialize: function (options) {
+      // constructor
+      L.Util.setOptions(this, options);
+    },
+    onAdd: function (map) {
+      var container = L.DomUtil.create('div', 'leaflet-control-takephoto leaflet-bar leaflet-control');
+
+      if (data.edit !== true) {
         this.photo_link = L.DomUtil.create('a', 'leaflet-control-takephoto-button leaflet-bar-part', container);
         this.photo_link.title = '{{_('Save RAW photo')}}';
         this.photo_link.target = '_blank';
@@ -2425,39 +2669,95 @@ function initWebcam(data) {
           L.DomEvent.on(this.archive_link, 'click', this._start_archive, this);
           L.DomUtil.create('i', 'fa fa-archive', this.archive_link);
         }
-
-        return container;
-      },
-      _start_archive: function (e) {
-          L.DomEvent.stopPropagation(e);
-          L.DomEvent.preventDefault(e);
-          webcamArchive(data.id);
       }
-    });
-    webcam.addControl(new L.Control.ExtraWebcamControls());
-    webcam.addControl(L.Control.loading({separate: true}));
 
-    globals.webcams[webcam._container.id] = null;
-    updateWebcamView(webcam);
+      if ('' !== data.realtimedata || data.edit === true) {
+        this.info_link = L.DomUtil.create('a', 'leaflet-control-info-button leaflet-bar-part', container);
+        this.info_link.href = '#';
+        this.info_link.title = '{{_('Toggle information')}}';
+        L.DomEvent.on(this.info_link, 'click', this._toggle_realtime_info, map);
+        L.DomUtil.create('i', 'fa fa-info', this.info_link);
+      }
+
+      if (data.edit === true) {
+        this.add_marker_link = L.DomUtil.create('a', 'leaflet-control-addmarker-button leaflet-bar-part', container);
+        this.add_marker_link.href = '#';
+        this.add_marker_link.title = '{{_('Add marker')}}';
+        L.DomEvent.on(this.add_marker_link, 'click', this._add_marker, realtime_data_layer);
+        L.DomUtil.create('i', 'fa fa-map-marker', this.add_marker_link);
+      }
+
+      if (data.is_live === true) {
+        this.toggle_audio = L.DomUtil.create('a', 'leaflet-control-audio-button leaflet-bar-part', container);
+        this.toggle_audio.href = '#';
+        this.toggle_audio.title = '{{_('Toggle audio')}}';
+        L.DomEvent.on(this.toggle_audio, 'click', this._toggle_audio);
+        L.DomUtil.create('i', 'glyphicon glyphicon-volume-up', this.toggle_audio);
+      }
+
+      return container;
+    },
+    _start_archive: function (e) {
+      L.DomEvent.stopPropagation(e);
+      L.DomEvent.preventDefault(e);
+      webcamArchive(data.id);
+    },
+    _toggle_realtime_info: function (e) {
+      L.DomEvent.stopPropagation(e);
+      L.DomEvent.preventDefault(e);
+      if (this.hasLayer(realtime_data_layer)) {
+        this.removeLayer(realtime_data_layer);
+      } else {
+        this.addLayer(realtime_data_layer);
+      }
+    },
+    _add_marker: function(e) {
+      L.DomEvent.stopPropagation(e);
+      L.DomEvent.preventDefault(e);
+      editWebcamMarker(createWebcamLabel(this,0,0,[],true));
+    },
+    _toggle_audio: function(e) {
+      L.DomEvent.stopPropagation(e);
+      L.DomEvent.preventDefault(e);
+      var video = $('.webcam_live_' + data.id)[0];
+      video.muted = !video.muted;
+      $(this).find('.glyphicon').removeClass('glyphicon-volume-up glyphicon-volume-down').addClass(video.muted ? 'glyphicon-volume-up' : 'glyphicon-volume-off')
+    }
+  });
+  webcam.addControl(new L.Control.ExtraWebcamControls());
+  webcam.addControl(L.Control.loading({separate: true}));
+
+  if (data.is_live) {
+    var video = $('.webcam_live_' + data.id)[0];
+    video.muted = true;
+    if (Hls.isSupported()) {
+      var hls = new Hls();
+      hls.loadSource('webcam/' + data.id + '/stream.m3u8');
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, function() {
+        video.play();
+      });
+    }
+    // hls.js is not supported on platforms that do not have Media Source Extensions (MSE) enabled.
+    // When the browser has built-in HLS support (check using `canPlayType`), we can provide an HLS manifest (i.e. .m3u8 URL) directly to the video element through the `src` property.
+    // This is using the built-in support of the plain video element, without using hls.js.
+    // Note: it would be more normal to wait on the 'canplay' event below however on Safari (where you are most likely to find built-in HLS support) the video.src URL must be on the user-driven
+    // white-list before a 'canplay' event will be emitted; the last video event that can be reliably listened-for when the URL is not on the white-list is 'loadedmetadata'.
+    else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = 'webcam/' + data.id + '/stream.m3u8';
+      video.addEventListener('loadedmetadata', function() {
+        video.play();
+      });
+    }
   }
 }
 
-function updateWebcamView(webcam) {
-  if ($('div#' + webcam._container.id).length === 1) {
-    webcam.eachLayer(function(layer) {
-      layer.redraw();
-    });
-    clearTimeout(globals.webcams[webcam._container.id]);
-    globals.webcams[webcam._container.id] = setTimeout(function() { updateWebcamView(webcam);},30 * 1000);
-  }
-}
-
-function add_webcam_setting_row(data) {
+function add_webcam_setting_row(data,is_new) {
   if (source_row === null || source_row === '') {
     return false;
   }
   // Create new row
-  var setting_row = $('<div>').addClass('row webcam').html(source_row.replace(/\[nr\]/g, $('form div.row.webcam').length));
+  var setting_row = $('<div>').addClass('row webcam' + (is_new ? ' new' : '')).html(source_row.replace(/\[nr\]/g, $('form div.row.webcam').length));
   if (data.id !== undefined) {
     // Set ID
     setting_row.attr('id','webcam_' + data.id);
@@ -2471,6 +2771,11 @@ function add_webcam_setting_row(data) {
     minimumResultsForSearch: Infinity
   }).on('change',function() {
     $(this).parents('.x_content').find('img').removeClass('webcam_90 webcam_180 webcam_270 webcam_H webcam_V').addClass('webcam_' + this.value);
+
+    if (this.name.endsWith('_archive')) {
+      var motionEnabled = ('motion' === this.value);
+      $(this).parents('.x_content').find('.motion_option').toggle(motionEnabled);
+    }
   });
   // Add on the bottom before the submit row
   setting_row.insertBefore('div.row.submit');
@@ -2481,7 +2786,6 @@ function update_webcam(data) {
   var content_row = $('div.row.webcam#' + 'webcam_' + data.id);
 
   content_row.find('h2 span.title').text(data.name);
-  content_row.find('.webcam_preview img').attr('src',data.image);
 
   // Set the values only when empty
   content_row.find('input:not(.knob), select').each(function(counter,form_field) {
@@ -2522,7 +2826,7 @@ function add_webcam() {
   data.resolution = {'width' : data.resolution_width, 'height' : data.resolution_height};
 
   // Add new row
-  add_webcam_setting_row(data);
+  add_webcam_setting_row(data,true);
   // Update new row with new values
   update_webcam(data);
 
@@ -2636,12 +2940,12 @@ function update_audio_playlist(data) {
   });
 }
 
-function add_audio_playlist_setting_row(data) {
+function add_audio_playlist_setting_row(data,is_new) {
   if (source_row === null || source_row === '') {
     return false;
   }
   // Create new row
-  var setting_row = $('<div>').addClass('row playlist').html(source_row.replace(/\[nr\]/g, $('form div.row.playlist').length));
+  var setting_row = $('<div>').addClass('row playlist' + (is_new ? ' new' : '')).html(source_row.replace(/\[nr\]/g, $('form div.row.playlist').length));
   if (data.id !== undefined) {
     // Set ID
     setting_row.attr('id','playlist_' + data.id);
@@ -2684,7 +2988,7 @@ function add_audio_playlist() {
   data['id'] = Math.floor(Date.now() / 1000);
 
   // Add new row
-  add_audio_playlist_setting_row(data);
+  add_audio_playlist_setting_row(data,true);
   // Update new row with new values
   update_audio_playlist(data);
 
@@ -2828,22 +3132,87 @@ function uploadProfileImage() {
 }
 /* End profile code */
 
+function load_calendar_history() {
+  $.getJSON('/api/calendar', function(data) {
+    $('ul.nav.navbar-nav.navbar-right ul#calendar_messages li.notification:not(.no_message)').remove();
+    var messages_in_future = 0;
+    var now = new Date();
+    $.each(data, function(counter, calendardata) {
+      var event_date = new Date(calendardata.start);
+      if (new Date(calendardata.end) > now) {
+        messages_in_future++;
+      }
+      add_notification_message('calendar_messages',
+                               calendardata.title,
+                               calendardata.description,
+                               'fa-calendar',
+                               'green',
+                               event_date.getTime() + (event_date.getTimezoneOffset() * 60000),
+                               'calendar.html');
+    });
+    if (messages_in_future == 0) {
+      $('ul.nav.navbar-nav.navbar-right li#calendar span.badge.bg-green').addClass('hidden');
+    } else {
+      $('ul.nav.navbar-nav.navbar-right li#calendar span.badge.bg-green').removeClass('hidden').text(messages_in_future);
+    }
+    $('ul.nav.navbar-nav.navbar-right ul#calendar_messages li.no_message').toggle(data.length==0);
+  });
+}
+
+function calendar_item(options) {
+  if (options === undefined) {
+      options = {id : null,
+                 start : new Date(),
+                 end : new Date(),
+                 title: '',
+                 description: ''};
+  }
+
+  if (options.end === undefined || options.end === null || '' === options.end) {
+    options.end = options.start;
+  }
+
+  $('input[name="calendar_id"').val(options.id);
+  $('input[name="calendar_title"').val(options.title);
+  $('input[name="calendar_description"').val(options.description);
+  $('#editor-one').html(options.description);
+
+  $('#calendar_date').daterangepicker({
+    startDate: options.start,
+    endDate: options.end,
+    singleDatePicker: false,
+    autoUpdateInput: true,
+    autoApply: true,
+    parentEl: '#calendar_date_picker'
+  });
+
+  // Create a trigger to toggle the calendar. But we have to wait until the modal window is starting to show...
+  modalWindow = $('.add-form').on('show.bs.modal',function(event) {
+    setTimeout(function(){
+      $('#calendar_date').trigger('click');
+      init_wysiwyg();
+    },250);
+  });
+
+  modalWindow.modal('show');
+}
+
 /**
  * Sort values alphabetically in select
  * source: http://stackoverflow.com/questions/12073270/sorting-options-elements-alphabetically-using-jquery
  */
 $.fn.extend({
   sortSelect() {
-    let options = this.find("option"),
+    var options = this.find("option"),
       arr = options.map(function(_, o) { return { t: $(o).text(), v: o.value }; }).get();
 
-    arr.sort((o1, o2) => { // sort select
-      let t1 = o1.t.toLowerCase(),
+    arr.sort(function(o1, o2) { // sort select
+      var t1 = o1.t.toLowerCase(),
           t2 = o2.t.toLowerCase();
       return t1 > t2 ? 1 : t1 < t2 ? -1 : 0;
     });
 
-    options.each((i, o) => {
+    options.each(function(i, o) {
       o.value = arr[i].v;
       $(o).text(arr[i].t);
     });
@@ -2857,6 +3226,23 @@ function terrariumpi_select2_option(state){
   return $('<div class="terrariumpi_select2_option" title="' + state.text + '">' + state.text + '</div>');
 }
 $.fn.select2.defaults.set("templateResult", terrariumpi_select2_option);
+
+function christmas() {
+  if (moment(moment().year() + '-12-25').week() == moment().week()) {
+    $('img.christmashat').show();
+  } else {
+    $('img.christmashat').hide();
+  }
+}
+
+function fireworks() {
+  if ('12-31' == moment().format('MM-DD') || '01-01' == moment().format('MM-DD')) {
+    $('div.left_col.menu div.profile').after('<canvas id="fireworks" width="100%"></canvas><br>');
+    $('body').append('<script src="/static/js/fireworks.js" type="text/javascript"></script>');
+  }
+}
+
+
 // Start it all.....
 $(document).ready(function() {
   moment.locale(globals.language);
@@ -2877,7 +3263,6 @@ $(document).ready(function() {
   });
 
   init_sidebar();
-  $('ul.nav.side-menu li:first a:first').trigger('click');
 
   $('#system_time span').text(moment().format('LLLL'));
   websocket_init(false);
@@ -2893,13 +3278,18 @@ $(document).ready(function() {
   })
 
   load_door_history();
+  load_calendar_history();
   load_player_status();
   load_page('dashboard.html');
 
   setInterval(function() {
     notification_timestamps();
     $('#system_time span').text(moment().format('LLLL'));
+    christmas();
+    fireworks();
   }, 30 * 1000);
 
+  christmas();
+  fireworks();
   version_check();
 });

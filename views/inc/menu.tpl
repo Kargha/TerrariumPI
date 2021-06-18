@@ -4,14 +4,17 @@
             <a class="site_title" href="/"><i class="fa fa-paw"></i> <span>{{title}}</span></a>
           </div>
           <div class="clearfix"></div><!-- menu profile quick info -->
+
           <div class="profile">
-            <div class="profile_pic"><img alt="{{person_name}}" class="img-circle profile_img" src="{{person_image}}"></div>
+            <div class="profile_pic">
+              <img src="/static/images/christmas_hat.png" class="christmashat">
+              <img alt="{{person_name}}" class="img-circle profile_img" src="{{person_image}}">
+            </div>
             <div class="profile_info">
               <span>{{_('Welcome')}},</span>
               <h2>{{person_name}}</h2>
             </div>
           </div><!-- /menu profile quick info -->
-          <br>
           <!-- sidebar menu -->
           <div class="main_menu_side hidden-print main_menu" id="sidebar-menu">
             <div class="menu_section">
@@ -218,6 +221,21 @@
                   <li class="no_message">
                     <div class="text-center">
                       <a><strong>{{_('No messages')}}</strong></a>
+                    </div>
+                  </li>
+                </ul>
+              </li>
+              <li class="dropdown" role="presentation" id="calendar">
+                <a aria-expanded="false" class="dropdown-toggle info-number" data-toggle="dropdown" href="javascript:;">
+                  <span class="online">
+                    <i class="fa fa-calendar green"></i> <span>{{_('Calendar')}}</span>
+                    <span class="badge bg-green hidden">0</span>
+                  </span>
+                </a>
+                <ul class="dropdown-menu list-unstyled msg_list" id="calendar_messages" role="menu">
+                  <li class="no_message">
+                    <div class="text-center">
+                      <a><strong>{{_('No events')}}</strong></a>
                     </div>
                   </li>
                 </ul>

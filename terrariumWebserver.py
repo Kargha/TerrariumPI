@@ -3,19 +3,6 @@ import terrariumLogging
 logger = terrariumLogging.logging.getLogger(__name__)
 
 import gettext
-gettext.install('terrariumpi', 'locales/')
-
-from bottle import BaseRequest, Bottle, request, abort, static_file, template, error, response, auth_basic, HTTPError
-#Increase bottle memory to max 5MB to process images in WYSIWYG editor
-BaseRequest.MEMFILE_MAX = 5 * 1024 * 1024
-
-from bottle.ext.websocket import GeventWebSocketServer
-from bottle.ext.websocket import websocket
-from queue import Queue
-
-from terrariumTranslations import terrariumTranslations
-from terrariumAudio import terrariumAudioPlayer
-from terrariumUtils import terrariumUtils
 
 try:
   import thread as _thread
@@ -27,8 +14,18 @@ import datetime
 import hashlib
 import functools
 
-from gevent import monkey, sleep
-monkey.patch_all()
+from bottle import BaseRequest, Bottle, request, abort, static_file, template, error, response, auth_basic, HTTPError
+#Increase bottle memory to max 5MB to process images in WYSIWYG editor
+BaseRequest.MEMFILE_MAX = 5 * 1024 * 1024
+
+from bottle.ext.websocket import GeventWebSocketServer
+from bottle.ext.websocket import websocket
+from queue import Queue
+from gevent import sleep
+
+from terrariumTranslations import terrariumTranslations
+from terrariumAudio import terrariumAudioPlayer
+from terrariumUtils import terrariumUtils
 
 class terrariumWebserverHeaders(object):
   name = 'webserver_headers'
@@ -121,7 +118,7 @@ class terrariumWebserver(object):
                      callback=self.__static_file,
                      apply=self.__authenticate(False))
 
-    self.__app.route('/api/<path:re:(config/notifications)>',
+    self.__app.route('/api/<path:re:config.*>',
                      method=['GET'],
                      callback=self.__get_api_call,
                      apply=self.__authenticate(True)
@@ -131,6 +128,24 @@ class terrariumWebserver(object):
                      method=['GET'],
                      callback=self.__get_api_call,
                      apply=self.__authenticate(False))
+
+    self.__app.route('/api/calendar',
+                     method=['POST'],
+                     callback=self.__create_calender_event,
+                     apply=self.__authenticate(True)
+                    )
+
+    self.__app.route('/api/reboot',
+                     method=['POST'],
+                     callback=self.__reboot,
+                     apply=self.__authenticate(True)
+                    )
+
+    self.__app.route('/api/shutdown',
+                     method=['POST'],
+                     callback=self.__shutdown,
+                     apply=self.__authenticate(True)
+                    )
 
     self.__app.route('/api/switch/toggle/<switchid:path>',
                      method=['POST'],
@@ -147,6 +162,12 @@ class terrariumWebserver(object):
     self.__app.route('/api/switch/state/<switchid:path>/<value:int>',
                      method=['POST'],
                      callback=self.__state_switch,
+                     apply=self.__authenticate(True)
+                    )
+
+    self.__app.route('/api/config/switches/hardware',
+                     method=['PUT'],
+                     callback=self.__replace_switch_hardware,
                      apply=self.__authenticate(True)
                     )
 
@@ -177,9 +198,14 @@ class terrariumWebserver(object):
     self.__app.route('/logout',
                      method=['GET'],
                      callback=self.__logout_url,
-
                      apply=auth_basic(self.__logout_authenticate,_('TerrariumPI') + ' ' + _('Authentication'),_('Authenticate to make any changes'))
                     )
+
+  def __reboot(self):
+    terrariumUtils.get_script_data('sudo reboot')
+
+  def __shutdown(self):
+    terrariumUtils.get_script_data('sudo shutdown')
 
   def __template_variables(self, template):
     variables = { 'lang' : self.__terrariumEngine.config.get_language(),
@@ -193,7 +219,10 @@ class terrariumWebserver(object):
                   'translations': self.__translations,
                   'device': self.__terrariumEngine.device,
                   'notifications' : self.__terrariumEngine.notification,
-                  'show_gauge_overview' : terrariumUtils.is_true(self.__config['sensor_gauge_overview'])}
+                  'show_gauge_overview' : 1 if self.__terrariumEngine.get_show_gauge_overview() else 0,
+                  'hide_environment' : self.__terrariumEngine.get_hide_environment_on_dashboard(),
+                  'graph_smooth_value' : self.__terrariumEngine.get_graph_smooth_value(),
+                  'graph_show_min_max_gauge': 1 if self.__terrariumEngine.get_graph_show_min_max_gauge() else 0}
 
     if 'index' == template or 'profile' == template:
       variables['person_name'] = self.__terrariumEngine.get_profile_name()
@@ -233,7 +262,7 @@ class terrariumWebserver(object):
     return staticfile
 
   def __player_commands(self,action):
-    result = {'ok' : False, 'title' : _('Error!'), 'message' : _('Player command could ot be executed!')}
+    result = {'ok' : False, 'title' : _('Error!'), 'message' : _('Player command could to be executed!')}
 
     if 'start' == action:
       self.__terrariumEngine.audio_player_start()
@@ -291,6 +320,47 @@ class terrariumWebserver(object):
 
     return result
 
+  def __replace_switch_hardware(self):
+    postdata = None
+    if request.json is not None:
+      postdata = request.json
+
+    self.__terrariumEngine.replace_hardware_calender_event(postdata['switch']['id'],
+                                                           postdata['switch']['device'],
+                                                           postdata['switch']['reminder_amount'],
+                                                           postdata['switch']['reminder_period'])
+    result = {'ok' : True,
+              'title' : _('Hardware is replaced'),
+              'message' : _('Hardware replacement is logged in the calendar')}
+
+    if '' != postdata['switch']['reminder_amount']:
+      result['message'] += '<br />' + _('A new replacement reminder is created')
+
+    return result
+
+  def __create_calender_event(self):
+    postdata = None
+    if request.json is not None:
+      postdata = request.json
+
+    if 'daterangepicker_start' not in postdata:
+      postdata['daterangepicker_start'] = postdata['calendar_date']
+
+    if 'daterangepicker_end' not in postdata:
+      postdata['daterangepicker_end'] = postdata['calendar_date']
+
+    self.__terrariumEngine.create_calendar_event(postdata['calendar_title'],
+                                                 postdata['calendar_description'],
+                                                 None,
+                                                 postdata['daterangepicker_start'],
+                                                 postdata['daterangepicker_end'],
+                                                 None if 'calendar_id' not in postdata else postdata['calendar_id'])
+    result = {'ok' : True,
+              'title' : _('Calender event created'),
+              'message' : _('The calender event is created')}
+
+    return result
+
   def __get_api_call(self,path):
     response.headers['Expires'] = (datetime.datetime.utcnow() + datetime.timedelta(seconds=10)).strftime('%a, %d %b %Y %H:%M:%S GMT')
     response.headers['Access-Control-Allow-Origin'] = '*'
@@ -312,6 +382,14 @@ class terrariumWebserver(object):
 
     elif 'profile' == action:
       result = self.__terrariumEngine.get_profile()
+
+    elif 'calendar' == action:
+      if 'ical' in parameters:
+        response.headers['Content-Type'] = 'text/calendar'
+        response.headers['Content-Disposition'] = 'attachment; filename=terrariumpi.ical.ics'
+
+      response.headers['Content-Type'] = 'application/json'
+      result = json.dumps(self.__terrariumEngine.get_calendar(parameters,**{'start':request.query.get('start'),'end':request.query.get('end')}))
 
     elif 'sensors' == action:
       result = self.__terrariumEngine.get_sensors(parameters)
@@ -381,8 +459,8 @@ class terrariumWebserver(object):
 
               csv += '"' + '","'.join(row) + "\"\n"
 
-        response.headers['Content-Type'] = 'application/csv';
-        response.headers['Content-Disposition'] = 'attachment; filename=' + export_name;
+        response.headers['Content-Type'] = 'application/csv'
+        response.headers['Content-Disposition'] = 'attachment; filename=' + export_name
         return csv
 
     return result
@@ -397,6 +475,7 @@ class terrariumWebserver(object):
   def __manual_mode_switch(self,switchid):
     if switchid in self.__terrariumEngine.power_switches:
       self.__terrariumEngine.power_switches[switchid].set_manual_mode(not self.__terrariumEngine.power_switches[switchid].in_manual_mode())
+      self.__terrariumEngine.config.save_power_switch(self.__terrariumEngine.power_switches[switchid].get_data())
       return {'ok' : True}
 
     return {'ok' : False}
@@ -426,6 +505,7 @@ class terrariumWebserver(object):
     config = terrariumWebserver.app.terrarium.get_config('system')
     variables = { 'lang' : terrariumWebserver.app.terrarium.config.get_language(),
                   'title' : config['title'],
+                  'version' : config['version'],
                   'page_title' : config['title'] + ' | 404'
                 }
 

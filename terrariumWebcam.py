@@ -7,12 +7,6 @@ try:
 except ImportError as ex:
   import _thread
 
-try:
-  from subprocess import DEVNULL # py3k
-except ImportError:
-  import os
-  DEVNULL = open(os.devnull, 'wb')
-
 import time
 import cv2
 import math
@@ -30,11 +24,14 @@ from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 from hashlib import md5
 from shutil import copyfile
+from gevent import sleep
+try:
+  from subprocess import DEVNULL # py3k
+except ImportError:
+  import os
+  DEVNULL = open(os.devnull, 'wb')
 
 from terrariumUtils import terrariumUtils
-
-from gevent import monkey, sleep
-monkey.patch_all()
 
 class terrariumWebcamSource(object):
   TYPE = None
@@ -53,11 +50,12 @@ class terrariumWebcamSource(object):
   UPDATE_TIMEOUT = 60
   VALID_ROTATIONS = ['0','90','180','270','h','v']
 
-  def __init__(self, webcam_id, location, name = '', rotation = '0', width = 640, height = 480, archive = False, archive_light = 'ignore', archive_door = 'ignore', environment = None):
+  def __init__(self, webcam_id, location, name = '', rotation = '0', width = 640, height = 480, awb = 'auto', archive = False, archive_light = 'ignore', archive_door = 'ignore', environment = None):
     # Variables per webcam
     self.raw_image = None
 
     # 'Hidden' variables
+    self.__awb = awb
     self.__max_zoom = 0
     self.__last_update = 0
     self.__last_archive = 0
@@ -67,19 +65,28 @@ class terrariumWebcamSource(object):
     self.__state = None
     self.__environment = environment
 
+    # set defaults
+    self.set_motion_boxes(True)
+    self.set_motion_delta_threshold(25)
+    self.set_motion_min_area(500)
+    self.set_motion_compare_frame('last')
+
     # Per webcam config
     self.set_location(location)
     self.set_name(name)
     self.set_resolution(width,height)
     self.set_rotation(rotation)
-    self.set_archive(archive)
-    self.set_archive_light(archive_light)
-    self.set_archive_door(archive_door)
+
+    self.realtimedata = ''
 
     if webcam_id is None:
       self.__id = md5(self.get_location().encode()).hexdigest()
     else:
       self.__id = id
+
+    self.set_archive(archive)
+    self.set_archive_light(archive_light)
+    self.set_archive_door(archive_door)
 
     if not os.path.isdir(terrariumWebcamSource.STORE_LOCATION + self.get_id()):
       os.makedirs(terrariumWebcamSource.STORE_LOCATION + self.get_id())
@@ -194,6 +201,27 @@ class terrariumWebcamSource(object):
 
     self.raw_image.paste(mask, (int((source_width/2)-(mask_width/2)),int((source_height/2)-(mask_height/2))), mask)
 
+  def get_last_archive_image(self):
+    # Get last image from 'today'
+    regex = r'(' + terrariumWebcamSource.ARCHIVE_LOCATION + ')\d+/\d+/\d+/([^_]+_archive_)\d+(\..*)'
+    subst = '\\1/' + (datetime.datetime.now()).strftime("%Y/%m/%d") + '/\\2*\\3'
+    file_filter = re.sub(regex, subst, self.get_raw_image(True)).replace('//','/')
+    files = glob.glob(file_filter)
+    files.sort(key=os.path.getmtime,reverse = True)
+
+    if len(files) == 0:
+      # No images found, so look back 24 hours from 'today'
+      regex = r'(' + terrariumWebcamSource.ARCHIVE_LOCATION + ')\d+/\d+/\d+/([^_]+_archive_)\d+(\..*)'
+      subst = '\\1/' + (datetime.datetime.now()-datetime.timedelta(days=1)).strftime("%Y/%m/%d") + '/\\2*\\3'
+      file_filter = re.sub(regex, subst, self.get_raw_image(True)).replace('//','/')
+      files = glob.glob(file_filter)
+      files.sort(key=os.path.getmtime,reverse = True)
+
+    if len(files) == 0:
+      return False
+
+    return files[0]
+
   def get_archive_images(self,prefix = None):
     regex = r'(' + terrariumWebcamSource.ARCHIVE_LOCATION + ')\d+/\d+/\d+/([^_]+_archive_)\d+(\..*)'
     subst = '\\1/' + str(prefix[0]) + '/' + str(prefix[1]) + '/' + str(prefix[2]) + '/\\2*\\3'
@@ -229,32 +257,40 @@ class terrariumWebcamSource(object):
           if self.__previous_image is None or self.__previous_image.shape[0] != current_image.shape[0] or self.__previous_image.shape[1] != current_image.shape[1]:
             self.__previous_image = current_image
 
-          thresh = cv2.threshold(cv2.absdiff(self.__previous_image, current_image), 25, 255, cv2.THRESH_BINARY)[1]
+          thresh = cv2.threshold(cv2.absdiff(self.__previous_image, current_image), self.motion_delta_threshold, 255, cv2.THRESH_BINARY)[1]
           thresh = cv2.dilate(thresh, None, iterations=2)
 
-          cnts = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-          if sys.version_info.major == 2:
-            # On pyton2 we use OpenCV2. Is different then Python 3 with OpenCV3
+          try:
             (cnts,_) = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-          elif sys.version_info.major == 3:
-            # On pyton2 we use OpenCV2. Is different then Python 3 with OpenCV3
+          except Exception as ex:
+            # Old legacy Python3 and OpenCV combination...
             (_,cnts,__) = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-          self.__previous_image = current_image
+          # if comparison frame is "last frame", then set the previous
+          # frame now
+          if self.motion_compare_frame == 'last':
+            self.__previous_image = current_image
+
           motion_detected = False
           raw_image = cv2.imread(self.get_raw_image())
           # loop over the contours
           for c in cnts:
             # if the contour is too small, ignore it
-            if cv2.contourArea(c) < 500:
+            if cv2.contourArea(c) < self.motion_min_area:
               continue
 
             motion_detected = True
             # compute the bounding box for the contour, draw it on the frame,
-            (x, y, w, h) = cv2.boundingRect(c)
-            cv2.rectangle(raw_image, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            # don't draw if motion boxes is disabled
+            if self.get_motion_boxes():
+              (x, y, w, h) = cv2.boundingRect(c)
+              cv2.rectangle(raw_image, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
           if motion_detected:
+            # if compare frame is set to archived, then we save it here
+            if self.motion_compare_frame == 'archived':
+              self.__previous_image = current_image
+
             cv2.imwrite(archive_image,raw_image)
             logger.info('Saved webcam %s image for archive due to motion detection' % (self.get_name(),))
             self.__last_update = int(time.time())
@@ -333,6 +369,12 @@ class terrariumWebcamSource(object):
       self.__running = False
       logger.info('Done updating webcam \'%s\' at location %s in %.5f seconds' % (self.get_name(), self.get_location(),time.time()-starttime))
 
+  def set_realtimedata(self, data):
+    self.realtimedata = data.strip(';')
+
+  def get_realtimedata(self):
+    return self.realtimedata.strip(';')
+
   def get_data(self,archive = False):
     data = {'id': self.get_id(),
             'location': self.get_location(),
@@ -345,11 +387,17 @@ class terrariumWebcamSource(object):
             'last_update' : self.get_last_update(),
             'image': self.get_raw_image(),
             'preview': self.get_preview_image(),
+            'awb' : self.get_awb(),
             'archive': self.get_archive(),
             'archivelight': self.get_archive_light(),
             'archivedoor': self.get_archive_door(),
-            'archive_images' : []
-            }
+            'archive_images' : [],
+            'motionboxes': self.get_motion_boxes(),
+            'motiondeltathreshold': self.get_motion_delta_threshold(),
+            'motionminarea': self.get_motion_min_area(),
+            'motioncompareframe': self.get_motion_compare_frame(),
+            'realtimedata' : self.get_realtimedata()
+          }
 
     if archive:
       data['archive_images'] = self.get_archive_images(archive)
@@ -395,11 +443,23 @@ class terrariumWebcamSource(object):
   def get_max_zoom(self):
     return self.__max_zoom
 
+  def set_awb(self,mode):
+    self.__awb = mode
+
+  def get_awb(self):
+    return self.__awb
+
   def get_archive(self):
     return self.archive
 
-  def set_archive(self,enabled):
-    self.archive = enabled
+  def set_archive(self,archive):
+    if archive != 'motion':
+      last_archive_image = self.get_last_archive_image()
+      if last_archive_image is not False:
+        gmttime = int(os.path.splitext(last_archive_image)[0].split('_')[-1])
+        self.__last_archive = gmttime
+
+    self.archive = archive
 
   def get_archive_light(self):
     return self.archive_light_state
@@ -412,6 +472,30 @@ class terrariumWebcamSource(object):
 
   def get_archive_door(self):
     return self.archive_door_state
+
+  def get_motion_boxes(self):
+    return terrariumUtils.is_true(self.motion_boxes)
+
+  def set_motion_boxes(self,state):
+    self.motion_boxes = terrariumUtils.is_true(state)
+
+  def get_motion_delta_threshold(self):
+    return self.motion_delta_threshold
+
+  def set_motion_delta_threshold(self, state):
+    self.motion_delta_threshold = int(state)
+
+  def get_motion_min_area(self):
+    return self.motion_min_area
+
+  def set_motion_min_area(self, state):
+    self.motion_min_area = int(state)
+
+  def get_motion_compare_frame(self):
+    return self.motion_compare_frame
+
+  def set_motion_compare_frame(self, state):
+    self.motion_compare_frame = state
 
   def get_state(self):
     return self.__state
@@ -433,9 +517,12 @@ class terrariumWebcamSource(object):
   def is_live(self):
     return False
 
+  def stop(self):
+    pass
+
 class terrariumWebcamLiveSource(terrariumWebcamSource):
-  def __init__(self, webcam_id, location, name = '', rotation = '0', width = 640, height = 480, archive = False, archive_light = 'ignore', archive_door = 'ignore', environment = None):
-    super(terrariumWebcamLiveSource,self).__init__(webcam_id, location, name, rotation, width, height, archive, archive_light, archive_door, environment)
+  def __init__(self, webcam_id, location, name = '', rotation = '0', width = 640, height = 480, awb = 'auto', archive = False, archive_light = 'ignore', archive_door = 'ignore', environment = None):
+    super(terrariumWebcamLiveSource,self).__init__(webcam_id, location, name, rotation, width, height, awb, archive, archive_light, archive_door, environment)
     self.process_id = None
     self.start()
 
@@ -445,6 +532,10 @@ class terrariumWebcamLiveSource(terrariumWebcamSource):
       sleep(1)
 
     _thread.start_new_thread(self.run, ())
+
+  def stop(self):
+    if self.process_id is not None:
+        subprocess.Popen(['/usr/bin/pkill', '-P',str(self.process_id.pid)])
 
   def run(self):
     cmd = shlex.split(self.cmd())
@@ -477,17 +568,46 @@ class terrariumWebcamLiveSource(terrariumWebcamSource):
   def is_live(self):
     return True
 
+# Bug / Upstream
+# https://github.com/raspberrypi/firmware/issues/1167#issuecomment-511798033
+# https://github.com/waveform80/picamera/pull/576
+from picamera import mmal
+import ctypes as ct
+
+class PiCameraUpstream(PiCamera):
+  AWB_MODES = {
+    'off':           mmal.MMAL_PARAM_AWBMODE_OFF,
+    'auto':          mmal.MMAL_PARAM_AWBMODE_AUTO,
+    'sunlight':      mmal.MMAL_PARAM_AWBMODE_SUNLIGHT,
+    'cloudy':        mmal.MMAL_PARAM_AWBMODE_CLOUDY,
+    'shade':         mmal.MMAL_PARAM_AWBMODE_SHADE,
+    'tungsten':      mmal.MMAL_PARAM_AWBMODE_TUNGSTEN,
+    'fluorescent':   mmal.MMAL_PARAM_AWBMODE_FLUORESCENT,
+    'incandescent':  mmal.MMAL_PARAM_AWBMODE_INCANDESCENT,
+    'flash':         mmal.MMAL_PARAM_AWBMODE_FLASH,
+    'horizon':       mmal.MMAL_PARAM_AWBMODE_HORIZON,
+    'greyworld':     ct.c_uint32(10)
+  }
 
 class terrariumWebcamRPI(terrariumWebcamSource):
   TYPE = 'rpicam'
-  VALID_SOURCE = '^rpicam$'
+  VALID_SOURCE = '^rpicam(,\d+)?$'
   INFO_SOURCE = 'rpicam'
 
   def get_raw_data(self):
     logger.debug('Using RPICAM')
+    power_mngt = None
+    if ',' in self.location:
+      power_mngt = self.location.split(',')[1]
+      # Some kind of 'power management' with the last gpio pin number :)
+      logger.debug('Enabling IR LED for webcam \'{}\' with GPIO power pin {}'.format(self.get_name(),power_mngt))
+      GPIO.setup(terrariumUtils.to_BCM_port_number(power_mngt), GPIO.OUT)
+      sleep(0.1)
+
     stream = BytesIO()
     try:
-      with PiCamera(resolution=(self.resolution['width'], self.resolution['height'])) as camera:
+      with PiCameraUpstream(resolution=(self.resolution['width'], self.resolution['height'])) as camera:
+        camera.awb_mode = self.get_awb()
         logger.debug('Open rpicam')
         camera.start_preview()
         logger.debug('Wait %s seconds for preview' % (terrariumWebcamSource.WARM_UP,))
@@ -496,7 +616,13 @@ class terrariumWebcamRPI(terrariumWebcamSource):
         camera.capture(stream, format='jpeg')
         logger.debug('Done creating RPICAM image')
         self.raw_image = stream
-        return True
+
+      if power_mngt:
+        # Shutdown the IR LEDS when done
+        logger.debug('Shutting down IR LEDS for webcam {}'.format(self.get_name()))
+        GPIO.cleanup(terrariumUtils.to_BCM_port_number(power_mngt))
+
+      return True
     except PiCameraError:
       logger.exception('Error getting raw RPI image from webcam \'%s\' with error message:' % (self.get_name(),))
 
@@ -542,9 +668,28 @@ class terrariumWebcamUSB(terrariumWebcamSource):
 
     return False
 
+class terrariumWebcamLocal(terrariumWebcamSource):
+  TYPE = 'local'
+  VALID_SOURCE = '^local://(.*)'
+  INFO_SOURCE = 'local://image.jpg'
+
+  def get_raw_filename(self):
+    return re.search(terrariumWebcamLocal.VALID_SOURCE, self.location, re.IGNORECASE).group(1)
+
+  def get_raw_data(self):
+    location = self.get_raw_filename()
+    logger.debug('Using local location: %s' % (location))
+    try:
+      self.raw_image = open(location, "rb")
+      return True
+    except terrariumWebcamRAWUpdateException as ex:
+      logger.warning('Error getting raw local image from webcam \'%s\' with error message: %s' % (self.get_name(),ex))
+
+    return False
+
 class terrariumWebcamRemote(terrariumWebcamSource):
   TYPE = 'remote'
-  VALID_SOURCE = '^https?://.*\.[^m3u8]*$'
+  VALID_SOURCE = '^https?://(?!.*\.(?:m3u8))'
   INFO_SOURCE = 'https://server.com/stream.jpg'
 
   def get_raw_data(self):
@@ -568,11 +713,12 @@ class terrariumWebcamRPILive(terrariumWebcamLiveSource):
 
   def cmd(self):
     resolution = self.get_resolution()
-    return './live_rpicam.sh "{}" {} {} {} {}'.format(self.get_name(),
-                                                      resolution['width'] if self.get_rotation() not in ['90','270'] else resolution['height'],
-                                                      resolution['height'] if self.get_rotation() not in ['90','270'] else resolution['width'],
-                                                      self.get_rotation(),
-                                                      terrariumWebcamRPILive.STORE_LOCATION + self.get_id())
+    return './live_rpicam.sh "{}" {} {} {} {} {}'.format(self.get_name(),
+                                                         resolution['width'] if self.get_rotation() not in ['90','270'] else resolution['height'],
+                                                         resolution['height'] if self.get_rotation() not in ['90','270'] else resolution['width'],
+                                                         self.get_rotation(),
+                                                         self.get_awb(),
+                                                         terrariumWebcamRPILive.STORE_LOCATION + self.get_id())
 
 class terrariumWebcamHLSLive(terrariumWebcamLiveSource):
   TYPE = 'hls_live'
@@ -594,14 +740,15 @@ class terrariumWebcamRAWUpdateException(Exception):
 class terrariumWebcam(object):
   SOURCES = [terrariumWebcamRPI,
              terrariumWebcamUSB,
+             terrariumWebcamLocal,
              terrariumWebcamRemote,
              terrariumWebcamRPILive,
              terrariumWebcamHLSLive]
 
-  def __new__(self,webcam_id, location, name = '', rotation = '0', width = 640, height = 480, archive = False, archive_light = 'ignore', archive_door = 'ignore', environment = None):
+  def __new__(self,webcam_id, location, name = '', rotation = '0', width = 640, height = 480, awb = 'auto', archive = False, archive_light = 'ignore', archive_door = 'ignore', environment = None):
     for webcam_source in terrariumWebcam.SOURCES:
       if re.search(webcam_source.VALID_SOURCE, location, re.IGNORECASE):
-        return webcam_source(webcam_id,location,name,rotation,width,height,archive,archive_light,archive_door,environment)
+        return webcam_source(webcam_id,location,name,rotation,width,height,awb,archive,archive_light,archive_door,environment)
 
     raise terrariumWebcamSourceException()
 

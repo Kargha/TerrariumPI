@@ -1,4 +1,7 @@
-# TerrariumPI 3.9.4
+# TerrariumPI 3.9.9
+[![Translation status](https://weblate.theyosh.nl/widgets/terrariumpi/-/3-x-y-z/svg-badge.svg)](https://weblate.theyosh.nl/engage/terrariumpi/)
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Ftheyosh%2FTerrariumPI.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Ftheyosh%2FTerrariumPI?ref=badge_shield)
+
 Software for cheap home automation of your reptile terrarium or any other enclosed environment. With this software you are able to control for example a terrarium so that the temperature and humidity is of a constant value. Controlling the temperature can be done with heat lights, external heating or cooling system. As long as there is one temperature sensor available the software is able to keep a constant temperature.
 
 For humidity control there is support for a spraying system. The sprayer can be configured to spray for an X amount of seconds and there is a minumal period between two spray actions. Use at least one humitidy sensors to get a constant humidity value. In order to lower the humidity you can add a dehumidifier.
@@ -7,7 +10,7 @@ The software is that flexible that there is no limit in amount of sensors, relay
 
 If you are using this software for your animals or plants, **[please post some pictures](https://github.com/theyosh/TerrariumPI/issues/210)**
 
-It can either run on Python 2.7 or [Python 3.5+](https://github.com/theyosh/TerrariumPI/wiki/FAQ#how-to-use-python-35)
+It can either run on Python 2.7 or [Python 3.5+](https://github.com/theyosh/TerrariumPI/wiki/FAQ#how-to-use-python-35). Prefered is Python3
 
 Think off:
 - Terrarium (wet or dry)
@@ -40,9 +43,11 @@ And all this is controlled with a nice webinterface based on [Gentelella a Boots
 - Support for timmers in power switches and environment [#72](https://github.com/theyosh/TerrariumPI/issues/72)
   - Predefined start and stop times based on timer or weather
   - Predefined on and off durations in minutes
-- Support for Energenie USB and LAN power switches [EG-PM(s)2](http://energenie.com/item.aspx?id=7556)
+- Support for Energenie USB, LAN and RF power switches [EG-PM(s)2](http://energenie.com/item.aspx?id=7556)
 - Support for WeMo Wifi power switches
-- Support for [Meross MSS425E Power Switches](https://www.meross.com/product/16/article/)
+- Support for [Meross MSS425E Power Switches](https://www.meross.com/product/16/article/) (Requires Python 3 setup)
+- Support for Sonoff remote power devices
+  - [Tasmota](https://github.com/arendst/Sonoff-Tasmota)
 - Support for [multiple type of sensors](https://github.com/theyosh/TerrariumPI/wiki/Hardware#sensors)
   - Temperature
   - Humidity
@@ -83,6 +88,7 @@ And all this is controlled with a nice webinterface based on [Gentelella a Boots
 - Display support
   - LCD 16x2 or 20x4 screens either through I2C or [Serial](https://www.instructables.com/id/Raspberry-Pi-Arduino-LCD-Screen/)
   - OLED based on SSD1306
+- Calendar system when hardware is replacement and when new hardware needs to be installed
 - Notifications system. Custom messages for custom actions with use of variables in the messages
   - Get notifications through
     - Email
@@ -102,17 +108,13 @@ It is currently controling my reptile terrarium for more then three years! And m
 
 ## Translations
 The software has support for the following languages:
-- English
-- Dutch
-- German
-- Italian
-- France
-- Norwegian
 
-Your language not in the list or not up to date? [Create your own language translation](https://github.com/theyosh/TerrariumPI/wiki/Translations)
+[![Translation status](https://weblate.theyosh.nl/widgets/terrariumpi/-/3-x-y-z/multi-auto.svg)](https://weblate.theyosh.nl/engage/terrariumpi/)
+
+Your language not in the list or not up to date? Click the button [![Translation status](https://weblate.theyosh.nl/widgets/terrariumpi/-/3-x-y-z/svg-badge.svg)](https://weblate.theyosh.nl/engage/terrariumpi/)
 
 ## Installation
-The installation expects a Pi with working network and ssh. It is tested with [Raspbian Stretch Lite](https://www.raspberrypi.org/downloads/raspbian/). For now the Full version is not working somehow.... So use the lite image! A new installation will take about 45 minutes. This is due to manually compiling python modules for the latest versions. Upgrades will go much faster.
+The installation expects a Pi with working network and ssh. It is tested with [Raspberry Pi OS Lite](https://www.raspberrypi.org/downloads/raspbian/). For now the Full version is not working somehow.... So use the lite image! A new installation will take about 45 minutes. This is due to manually compiling python modules for the latest versions. Upgrades will go much faster.
 1. Get a working Raspberry Pi and login as user 'pi'  
   `ssh pi@[raspberry_ip]`
 2. Install git  
@@ -122,7 +124,7 @@ The installation expects a Pi with working network and ssh. It is tested with [R
 4. Enter the new TerrariumPI folder  
   `cd TerrariumPI`
 5. Run the installer script and wait  
-  `sudo ./install.sh`
+  `sudo ./install.sh 3`
 6. Reboot Raspberry PI to get all the needed modules loaded  
   `sudo reboot`
 7. Go to the webinterface at http://[raspberry_ip]:8090
@@ -140,7 +142,7 @@ This updating is based on that the software is installed with the steps in the I
 3. Update the new code with git  
   `git pull`
 4. Re-run the installation script in order to update software dependencies  
-  `sudo ./install.sh`
+  `sudo ./install.sh 3`
 4. Restart TerrariumPI according to: https://github.com/theyosh/TerrariumPI/wiki/FAQ#how-to-restart-terrariumpi
 
 Now **clear your browser cache** and reload the webinterface. A brand new version should be running.
@@ -150,7 +152,7 @@ This software requires a Raspberry Pi and some extra hardware in order to run an
 - Raspberry PI with at least **4GB SD card**
   - Pi 2
   - Pi 3
-  - Zero
+  - Zero (At own risk/no support)
 - Power relay board
   - USB versions (Serial and Bitbang)
   - GPIO versions
@@ -192,6 +194,8 @@ more information is here: [Remote data wiki](https://github.com/theyosh/Terrariu
 ![TerrariumPI 2.5 Environment setup screenshot](screenshots/Environment_setup.png)
 ### System settings
 ![TerrariumPI 2.5 System setup screenshot](screenshots/System_setup.png)
+### MOTD (Message Of The Day)
+![TerrariumPI 2.5 MOTD screenshot](screenshots/terrariumpi-motd.png)
 
 More screenshots can be found [here](https://github.com/theyosh/TerrariumPI/tree/master/screenshots)
 
@@ -201,3 +205,7 @@ More screenshots can be found [here](https://github.com/theyosh/TerrariumPI/tree
 
 ## About
 A live version is running at: https://terrarium.theyosh.nl/index.html. Go to 'Help' menu for more information about used hardware, software and how to setup.
+
+
+## License
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Ftheyosh%2FTerrariumPI.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2Ftheyosh%2FTerrariumPI?ref=badge_large)

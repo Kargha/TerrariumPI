@@ -2,6 +2,7 @@
 import terrariumLogging
 logger = terrariumLogging.logging.getLogger(__name__)
 
+import datetime
 try:
   import configparser
 except ImportError as ex:
@@ -9,8 +10,6 @@ except ImportError as ex:
 
 from glob import glob
 from hashlib import md5
-
-import datetime
 
 from terrariumUtils import terrariumUtils
 
@@ -33,7 +32,7 @@ class terrariumConfig(object):
     logger.info('Setting up configuration')
     self.__cache_available_languages = None
 
-    self.__config = configparser.ConfigParser()
+    self.__config = configparser.ConfigParser(interpolation=None)
     # Read defaults config file
     self.__config.readfp(open(terrariumConfig.DEFAULT_CONFIG))
     logger.info('Loaded default settings from %s' % (terrariumConfig.DEFAULT_CONFIG,))
@@ -437,6 +436,11 @@ class terrariumConfig(object):
               with open('.collector.update.{}.sql'.format(version),'w') as sql_file:
                 sql_file.write(collector_update_sql.strip())
 
+
+        elif version == 399:
+          title = self.__get_config('terrariumpi').get('title').replace('3.9.9','').strip()
+          self.__config.set('terrariumpi', 'title', str(title))
+
       # Update version number
       self.__config.set('terrariumpi', 'version', str(to_version))
       self.__save_config()
@@ -528,7 +532,7 @@ class terrariumConfig(object):
   def get_available_languages(self):
     '''Get terrariumPI available languages'''
     if self.__cache_available_languages is None:
-      self.__cache_available_languages = [language.replace('locales/','').replace('/','') for language in glob("locales/*/")]
+      self.__cache_available_languages = ['en'] + [language.replace('locales/','').replace('/','') for language in glob("locales/*/")]
 
     return self.__cache_available_languages
 
@@ -609,14 +613,14 @@ class terrariumConfig(object):
     return config['port']
   # End system functions
 
-  def get_merros_cloud(self):
-    return self.__get_config('merros_cloud')
+  def get_meross_cloud(self):
+    return self.__get_config('meross_cloud')
 
-  def set_merros_cloud(self,data):
-    data = {'merros_username' : data['merros_username'],
-            'merros_password' : data['merros_password']}
+  def set_meross_cloud(self,data):
+    data = {'meross_username' : data['meross_username'],
+            'meross_password' : data['meross_password']}
 
-    return self.__update_config('merros_cloud',data)
+    return self.__update_config('meross_cloud',data)
   # End system functions
 
   # Environment functions
@@ -680,7 +684,8 @@ class terrariumConfig(object):
   def save_sensors(self,data):
     update_ok = True
     for sensor in self.get_sensors():
-      self.__config.remove_section('sensor' + sensor['id'])
+      if 'exclude' not in sensor or not terrariumUtils.is_true(sensor['exclude']):
+        self.__config.remove_section('sensor' + sensor['id'])
 
     for sensorid in data:
       update_ok = update_ok and self.save_sensor(data[sensorid].get_data())
@@ -697,8 +702,8 @@ class terrariumConfig(object):
 
   # Switches config functions
   def save_power_switch(self,data):
-    clearfields = ['state','current_power_wattage','current_water_flow','manual_mode']
-    if 'dimmer' not in data['hardwaretype']:
+    clearfields = ['state','current_power_wattage','current_water_flow']
+    if 'dimmer' not in data['hardwaretype'] and 'brightpi' != data['hardwaretype']:
       clearfields += ['dimmer_duration','dimmer_off_duration','dimmer_off_percentage','dimmer_on_duration','dimmer_on_percentage']
 
     return self.__update_config('switch' + data['id'],data,clearfields)
@@ -706,7 +711,7 @@ class terrariumConfig(object):
   def save_power_switches(self,data):
     update_ok = True
     for power_switch in self.get_power_switches():
-      if 'exclude' in power_switch and not terrariumUtils.is_true(power_switch['exclude']):
+      if 'exclude' not in power_switch or not terrariumUtils.is_true(power_switch['exclude']):
         self.__config.remove_section('switch' + power_switch['id'])
 
     for power_switch_id in data:

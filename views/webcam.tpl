@@ -33,7 +33,6 @@
             </div>
           </div>
         </div>
-
         <script type="text/javascript">
           $(document).ready(function() {
             source_row = $('div.row.webcam').html();

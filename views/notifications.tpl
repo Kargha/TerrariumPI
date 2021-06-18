@@ -14,7 +14,7 @@
           </div>
           <div class="x_content">
             <p>{{_('Enter the values per service that you want to use. Per service are all fields required, except mail port and mail authentication values.')}}</p>
-            <p>{{_('Select per message the service so send the notification. You can have everyting per email, and important ones per pushover or telegram.')}}</p>
+            <p>{{_('Select per message the service to send the notification. You can have everything per email, and important ones per pushover or telegram.')}}</p>
             <p>{{_('Use %rawdata% to get all the possible replacement values. Then create your own message with variables like %now% and %current%. This can be done in either the title and message.')}}</p>
             <p>{{_('Make sure you submit the form after making changes!')}}</p>
           </div>
@@ -232,7 +232,7 @@
                   % for message in notifications.get_messages():
                   <div class="row">
                     <div class="col-md-3 col-sm-3 col-xs-12 form-group">
-                      {{message['id'].replace('_',' ').capitalize()}}
+                      {{message['name']}}
                     </div>
                     <div class="col-md-3 col-sm-2 col-xs-12 form-group">
                       <input class="form-control" name="{{message['id']}}_title"  value="{{message['title']}}" placeholder="{{_('Title')}}" type="text">

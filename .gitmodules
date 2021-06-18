@@ -19,3 +19,24 @@
 [submodule "hls-proxy"]
 	path = hls-proxy
 	url = https://github.com/Viblast/hls-proxy.git
+[submodule "python-MLX90614"]
+	path = python-MLX90614
+	url = https://github.com/CRImier/python-MLX90614.git
+[submodule "Bright-Pi"]
+	path = Bright-Pi
+	url = https://github.com/PiSupply/Bright-Pi.git
+[submodule "static/leaflet-icon-pulse"]
+	path = static/leaflet-icon-pulse
+	url = https://github.com/mapshakers/leaflet-icon-pulse.git
+[submodule "python-kasa"]
+	path = python-kasa
+	url = https://github.com/python-kasa/python-kasa.git
+[submodule "Adafruit_Python_DHT"]
+	path = Adafruit_Python_DHT
+	url = https://github.com/adafruit/Adafruit_Python_DHT.git
+[submodule "relay8-rpi"]
+	path = relay8-rpi
+	url = https://github.com/SequentMicrosystems/relay8-rpi.git
+[submodule "8relay-rpi"]
+	path = 8relay-rpi
+	url = https://github.com/SequentMicrosystems/8relay-rpi.git

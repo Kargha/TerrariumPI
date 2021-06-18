@@ -3,7 +3,7 @@
           <div class="col-md-12 col-sm-12 col-xs-12">
             <div class="x_panel">
               <div class="x_title">
-                <h2><span class="title">{{_('CPU Load')}}</span> <small>...</small> <span class="badge bg-red" style="display:none;">{{_('warning')}}</span></h2>
+                <h2><span class="title">{{_('CPU Load')}}</span> <span class="small">...</span> <span class="badge bg-red" style="display:none;">{{_('warning')}}</span></h2>
                 <ul class="nav navbar-right panel_toolbox">
                   <li>
                     <a class="collapse-link"><i class="fa fa-chevron-up"></i></a>
@@ -59,7 +59,7 @@
           <div class="col-md-12 col-sm-12 col-xs-12">
             <div class="x_panel">
               <div class="x_title">
-                <h2><span class="title">{{_('CPU Temperature')}}</span> <small>...</small> <span class="badge bg-red" style="display:none;">{{_('warning')}}</span></h2>
+                <h2><span class="title">{{_('CPU Temperature')}}</span> <span class="small">...</span> <span class="badge bg-red" style="display:none;">{{_('warning')}}</span></h2>
                 <ul class="nav navbar-right panel_toolbox">
                   <li>
                     <a class="collapse-link"><i class="fa fa-chevron-up"></i></a>
@@ -115,7 +115,7 @@
           <div class="col-md-12 col-sm-12 col-xs-12">
             <div class="x_panel">
               <div class="x_title">
-                <h2><span class="title">{{_('Memory usage')}}</span> <small>...</small> <span class="badge bg-red" style="display:none;">{{_('warning')}}</span></h2>
+                <h2><span class="title">{{_('Memory usage')}}</span> <span class="small">...</span> <span class="badge bg-red" style="display:none;">{{_('warning')}}</span></h2>
                 <ul class="nav navbar-right panel_toolbox">
                   <li>
                     <a class="collapse-link"><i class="fa fa-chevron-up"></i></a>
@@ -171,7 +171,7 @@
           <div class="col-md-12 col-sm-12 col-xs-12">
             <div class="x_panel">
               <div class="x_title">
-                <h2><span class="title">{{_('Disk usage')}}</span> <small>...</small> <span class="badge bg-red" style="display:none;">{{_('warning')}}</span></h2>
+                <h2><span class="title">{{_('Disk usage')}}</span> <span class="small">...</span> <span class="badge bg-red" style="display:none;">{{_('warning')}}</span></h2>
                 <ul class="nav navbar-right panel_toolbox">
                   <li>
                     <a class="collapse-link"><i class="fa fa-chevron-up"></i></a>
@@ -290,23 +290,23 @@
 
                     case 'temperature':
                       gauge_data.current = value;
-                      gauge_data.alarm_min = 30;
-                      gauge_data.alarm_max = 60;
-                      gauge_data.limit_max = 80;
+                      gauge_data.alarm_min = (globals.temperature_indicator == 'C' ? 30 : 86);
+                      gauge_data.alarm_max = (globals.temperature_indicator == 'C' ? 60 : 140);
+                      gauge_data.limit_max = (globals.temperature_indicator == 'C' ? 80 : 176);
                       break;
 
                     case 'memory':
                       gauge_data.current = value['used'];
                       gauge_data.limit_max = value['total'];
                       gauge_data.alarm_max = gauge_data.limit_max * 0.9;
-                      gauge_data.alarm_min = gauge_data.limit_max * 0.1;
+                      gauge_data.alarm_min = 0;
                       break;
 
                     case 'disk':
                       gauge_data.current = value['used'];
                       gauge_data.limit_max = value['total'];
                       gauge_data.alarm_max = gauge_data.limit_max * 0.9;
-                      gauge_data.alarm_min = gauge_data.limit_max * 0.1;
+                      gauge_data.alarm_min = 0;
                       break;
                   }
                   gauge_data.alarm = gauge_data.current < gauge_data.alarm_min || gauge_data.current > gauge_data.alarm_max
